@@ -1,0 +1,2 @@
+# Ignore credentials files
+backend/app/credentials.json

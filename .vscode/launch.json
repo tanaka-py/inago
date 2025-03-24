@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "compounds": [
+        {
+            "name": "FastAPI + Vue",
+            "configurations": ["Launch FastAPI", "Launch Vue"]
+        }
+    ],
+    "configurations": [
+        {
+            "name": "Launch FastAPI",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": ["app.main:app", "--reload"],
+            "cwd": "${workspaceFolder}/backend",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/backend/venv/scripts/python"  // 仮想環境を指定
+        },
+        {
+            "name": "Launch Vue",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5173",  // Vite サーバーのポートを指定
+            "webRoot": "${workspaceFolder}/frontend",  // frontend フォルダのパス
+            "sourceMapPathOverrides": {
+                "webpack:///*": "${webRoot}/*"
+            },
+            "postDebugTask": "npm: dev"  // Viteのサーバーを起動
+        }
+    ]
+}

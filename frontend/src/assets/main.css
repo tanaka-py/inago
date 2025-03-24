@@ -1,0 +1,264 @@
+/* src/styles/main.css */
+body, html {
+  padding-top: 40px;
+    /* headerの高さに合わせて調整 */
+    /* headerの高さに合わせて調整 */
+  height: 100%;
+  margin: 0;
+}
+
+.container {
+  min-height: 100%; /* コンテンツが少なくてもフッターが画面下に来るように */
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1; /* メインコンテンツがフッター上に収まる */
+}
+
+header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1000;
+  /* 他の要素より上に表示 */
+  background-color: #1f2937;
+  /* ダークな背景色 */
+  color: #fff;
+  /* 文字色を白に */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  /* ほんのりシャドウをつけて浮き上がらせる */
+}
+
+header h1.custom-title {
+  font-family: 'Roboto', sans-serif;
+  /* モダンなフォント */
+  font-size: 2rem;
+  /* タイトルのフォントサイズ */
+  font-weight: bold;
+  /* タイトルを太字 */
+  letter-spacing: 2px;
+  /* 文字の間隔を広めに */
+  text-transform: uppercase;
+  /* タイトルを大文字に */
+}
+
+.navbar {
+  background-color: #374151;
+  /* ナビゲーションバーの背景色 */
+}
+
+.navbar-light .navbar-nav .nav-link {
+  color: #f3f4f6;
+  /* リンクの色を少し薄い白に */
+  font-weight: 500;
+  /* リンクを少し太字に */
+  transition: color 0.3s ease;
+  /* ホバー時の色変更にスムーズなアニメーションを追加 */
+}
+
+.navbar-light .navbar-nav .nav-link:hover {
+  color: #10b981;
+  /* ホバー時に緑色に変化 */
+}
+
+.navbar-light .navbar-nav .active .nav-link {
+  color: #34d399;
+  /* アクティブなリンクは緑色 */
+  font-weight: 600;
+  /* アクティブリンクを強調 */
+}
+
+footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: #333;
+  color: white;
+  text-align: left;
+  padding: 10px 10px;
+}
+
+.custom-title {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 3rem;
+  text-align: left;
+  margin-left: 30px;
+  color: black;
+}
+
+.navbar-nav .nav-link {
+  color: #f3f4f6;
+  /* 通常時のリンク色 */
+  transition: color 0.3s ease;
+  /* 色変更にスムーズなアニメーションを追加 */
+}
+
+.navbar-nav .nav-link:hover {
+  color: #10b981;
+  /* ホバー時の色を緑に */
+}
+
+/* active-linkクラスが適用されたときのスタイル */
+.navbar-nav .nav-link.active-link {
+  color: #34d399;
+  /* アクティブなリンクの色を緑に */
+  font-weight: bold;
+  /* アクティブなリンクを太字に */
+}
+
+.table-scroll {
+  display: block;
+  table-layout: fixed; /* 列幅を固定 */
+  max-height: 400px;
+  height: 400px;
+  overflow-y: auto;
+  width: 100%;
+  /* 親要素に合わせてテーブル幅を調整 */
+}
+.table-scroll-wrapper {
+  position: relative;
+  height: 400px;
+  width: 100%;
+  /* 親要素の幅を100%に設定 */
+  overflow: hidden;
+}
+
+/* テーブルのヘッダー固定 */
+.table thead th {
+  position: sticky;
+  /* ヘッダーをスクロールしても固定 */
+  top: 0;
+  /* 上部に固定 */
+  background-color: #1f2937;
+  /* ヘッダーの背景色 */
+  color: #fff;
+  /* 文字色を白に */
+  z-index: 1;
+  /* 他の内容より上に表示されるように */
+}
+
+/* テーブル全体のスタイル */
+.table {
+  padding-top: 5px;
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #fff;
+  /* 背景色を白に */
+  border-radius: 8px;
+  /* 角を丸くする */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  /* ほんのりシャドウをつけて浮き上がらせる */
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* 角を丸くした時に余分な部分を隠す */
+}
+
+/* テーブルの行のスタイル */
+.table tbody tr {
+  transition: background-color 0.3s ease;
+  /* ホバー時に背景色がスムーズに変わるように */
+}
+
+.table tbody tr:nth-child(even) {
+  background-color: #f9fafb;
+  /* 偶数行に薄いグレー背景 */
+}
+
+.table tbody tr:hover {
+  background-color: #f3f4f6;
+  /* 行にホバーしたときの背景色 */
+}
+
+/* テーブルのセルのスタイル */
+.table td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+  /* 下線を追加 */
+}
+
+.time{
+  min-width:50px;
+}
+.code {
+  min-width: 50px;
+}
+.name {
+  min-width: 150px;
+}
+.title {
+  min-width: 200px;
+  cursor: pointer;
+}
+.link {
+  min-width: 200px;
+}
+
+/* ローディング用 */
+.spinner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid lightgray;
+  border-top: 5px solid white;
+  border-radius: 50%;
+  z-index: 10000;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* リロードアイコン */
+.reload-button {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #007bff;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  background-color: #fff;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s;
+}
+
+.reload-button:hover {
+  background-color: #f0f8ff;
+}
+
+.reload-button i {
+  font-size: 30px;
+  color: #007bff;
+  transition: transform 0.5s;
+}
+
+/* クリック時にアイコンを回転させる */
+.reload-button:active i {
+  transform: rotate(360deg);
+}

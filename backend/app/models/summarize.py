@@ -65,10 +65,10 @@ def clean_text(text):
     if match and match.start() <= 200:
         text = re.sub(r'^.*?(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', '', text, count=1)
         
-    # 証券会社までを削除
-    match = re.search(r'(東証|名証|札証|大証|福証)', text)
-    if match and match.start() <= 200:
-        text = re.sub(r'^.*?(東証|名証|札証|大証|福証)', '', text, count=1)
+    # # 証券会社までを削除
+    # match = re.search(r'(東証|名証|札証|大証|福証)', text)
+    # if match and match.start() <= 200:
+    #     text = re.sub(r'^.*?(東証|名証|札証|大証|福証)', '', text, count=1)
         
     # all right reserved系は全部消す
     pattern = r'[\s\W]*?(Ｒｅｓｅｒｖｅｄ|ｒｅｓｅｒｖｅｄ|ＲＩＧＨＴ|ｒｉｇｈｔ|ＲＩＧＨＴＳ|ｒｉｇｈｔｓ|' \
@@ -180,7 +180,7 @@ def adjust_summary_length(summary, sentences, target_length=2000):
 
 # 要約メイン処理
 def summarize_long_document(document, num_sentences=5, max_token_length=512, stride=256):
-    print(f'{document[:100]}の開始')
+    #print(f'{document[:100]}の開始')
     
     """
     k-meansクラスタリングを使った文書要約

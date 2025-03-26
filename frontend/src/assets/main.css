@@ -198,6 +198,13 @@ footer {
 .link {
   min-width: 200px;
 }
+.summary {
+  max-width: 800px;
+  word-wrap: break-word;
+  white-space: normal;
+  background-color: #007bff;
+  cursor: pointer;
+}
 
 /* ローディング用 */
 .spinner-overlay {
@@ -220,6 +227,13 @@ footer {
   border-radius: 50%;
   z-index: 10000;
   animation: spin 1s linear infinite;
+}
+
+.custom-modal-width{
+  max-width: 90%;
+  /* 画面の90%の幅にする */
+  width: 1200px;
+  /* 必要なら固定幅も設定 */
 }
 
 @keyframes spin {

@@ -30,6 +30,11 @@ import LoadingSpinner from '@/components/LoadingSpinner.vue'
                     >本日の開示</RouterLink
                   >
                 </li>
+                <li class="nav-item">
+                  <RouterLink to="/summarize" class="nav-link" active-class="active-link">
+                    要約確認
+                  </RouterLink>
+                </li>
               </ul>
             </div>
           </div>

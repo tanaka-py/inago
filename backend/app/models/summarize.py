@@ -2,6 +2,7 @@ import re
 import torch
 import time
 import numpy as np
+import pandas as pd
 import os
 from transformers import BertJapaneseTokenizer, BertModel
 from janome.tokenizer import Tokenizer
@@ -18,6 +19,11 @@ model = BertModel.from_pretrained(model_name)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
+
+# 。に変換する区切りワードを読み込み
+replace_list_path = os.path.join(os.path.dirname(__file__), '../data/summarize_replace.csv')
+replace_list_df = pd.read_csv(replace_list_path, header=None)
+replace_list = replace_list_df.iloc[:,0].tolist()
 
 # 並列で要約処理を回す
 def summarize_in_parallel(documents, max_workers=5):
@@ -41,6 +47,7 @@ def summarize_in_parallel(documents, max_workers=5):
     
     return results
 
+# 開示文章内から不要な文章を削除
 def clean_text(text):
     
     # URLまでを削除
@@ -74,8 +81,6 @@ def clean_text(text):
     pattern = r'[\s\W]*?(Ｒｅｓｅｒｖｅｄ|ｒｅｓｅｒｖｅｄ|ＲＩＧＨＴ|ｒｉｇｈｔ|ＲＩＧＨＴＳ|ｒｉｇｈｔｓ|' \
           r'Ａｌｌ|ａｌｌ|Ｌｔｄ．|ｌｔｄ．|ＣＯ．|ｃｏ．|Ｒｉｇｈｔｓ|ｒｉｇｈｔｓ|' \
           r'Reserved|Reserved\.|reserved|RIGHT|right|Right|RIGHTS|rights|All|all|Ltd\.|ltd\.|CO\.|co\.)[\s\W]*?'
-
-    # すべての該当単語を削除
     text = re.sub(pattern, '', text)
     
     # 以上以降を削除

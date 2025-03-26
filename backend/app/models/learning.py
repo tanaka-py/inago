@@ -19,7 +19,7 @@ gcs_list_csv_path = os.getenv('GCS_LIST_CSV_PATH', '')
 not_next = os.getenv('NOT_NEXT', 'False').lower() == 'true'
 
 # 保存データから学習を行う
-def learning_from_save_data(
+async def learning_from_save_data(
     target_date
     ):
     
@@ -483,4 +483,23 @@ def calculate_change_rate(
             return df_copy['ChangeRate'].iloc[0]
     else:
         return 
-
+  
+# 開示文章とその要約を取得  
+async def get_summarize_list(
+    target_date
+):
+    # 保存データを取得
+    list_key = f'{gcs_list_csv_path}/{target_date}.json'
+    data_list = googleapi.download_list(list_key)
+    
+    # 取得jsonを
+    data_df = pd.DataFrame(data_list)
+    data_df = data_df[['Link']]
+    
+    data_df = data_df[~data_df['Link'].apply(is_broken_text)]
+    
+    links = data_df['Link'].tolist()
+    
+    data_df['Summarize'] = summarize.summarize_in_parallel(links)
+    
+    return data_df.to_dict(orient="records")

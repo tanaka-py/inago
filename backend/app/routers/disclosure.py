@@ -106,6 +106,11 @@ async def learning_disclosure(item: LearningItem):
     return {
         'message': item.date
         }
+
+# 開示とその要約したリストを取得
+@router.post('/summarizelist')
+async def confirm_summarize(item: LearningItem):
+    return await learning.get_summarize_list(item.date)
     
 @router.get('/dummylist/{select_date}')
 async def get_dummylist():

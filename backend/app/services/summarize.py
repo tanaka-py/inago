@@ -11,6 +11,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from concurrent.futures import ThreadPoolExecutor
 import torch.nn.functional as F
 import networkx as nx
+from ..models import header_replace
 
 # モデルとトークナイザーを設定
 model_name = 'cl-tohoku/bert-base-japanese'
@@ -58,49 +59,14 @@ def clean_header(text):
     # 不要なブランクを削除
     text = re.sub(r'\s+', '', text).strip()
     
-    # 正規表現パターンをまとめておく
-    patterns = [
-        (r'https?://[a-zA-Z0-9.-]+\.(?:com|jp|net|org|co\.jp|biz|info|gov|edu|io|ai)(?:/[A-Za-z/]*)?(?=[^A-Za-z/]|$)', 'url'),  # URLを適切に切る
-        (r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}', 'email'),  # メールアドレス
-        (r'(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', 'phone_header'),  # 電話ヘッダ
-        (r'(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', 'phone_number')  # 電話番号
-    ]
-    
     # 各パターンで処理
-    for pattern, label in patterns:
+    for pattern, label in header_replace.PATTERNS:
         match = re.search(pattern, text)
         if match and match.start() <= 200:
             # マッチした部分までを削除
             text = re.sub(r'^.*?' + pattern, '', text, count=1)
 
     return text
-    
-    # header = text
-    
-    # # URLまでを削除
-    # match = re.search(r'https?://[^\s()<>]+(?:\([^\)]*\)|[^\s`!()\[\]{};:.,?–_])', header)
-    # if match and match.start() <= 200:
-    #     # URLまでを削除
-    #     header = re.sub(r'^.*?https?://[^\s()<>]+(?:\([^\)]*\)|[^\s`!()\[\]{};:.,?–_])', '', header, count=1)
-        
-    # match = re.search(r'@[^@\s]+\.[a-z]+(?:\.[a-z]+)?', header)
-    # if match and match.start() <= 200:
-    #     header = re.sub(r'^.*?(@[^@\s]+\.[a-z]+(?:\.[a-z]+)?)', '', header, count=1)
-    
-    # # 不要なブランクを削除
-    # header = re.sub(r'\s+', '', header).strip()
-    
-    # # 電話番号ヘッダまでを削除
-    # match = re.search(r'(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', header)
-    # if match and match.start() <= 200:
-    #     header = re.sub(r'^.*?(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', '', header, count=1)
-    
-    # # 電話番号までを削除
-    # match = re.search(r'(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', header)
-    # if match and match.start() <= 200:
-    #     header = re.sub(r'^.*?(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', '', header, count=1)
-
-    # return header
 
 # footer部分を削除
 def clean_footer(text):

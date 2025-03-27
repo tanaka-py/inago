@@ -1,7 +1,7 @@
 # 開示情報用APIを定義
 import os
 import pandas as pd
-from ..models import disclosure, googleapi, learning
+from ..services import disclosure, googleapi, learning
 from ..schemas.disclosure import LearningItem
 from fastapi import APIRouter
 

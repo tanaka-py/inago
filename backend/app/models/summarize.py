@@ -23,7 +23,12 @@ model.to(device)
 # 。に変換する区切りワードを読み込み
 replace_list_path = os.path.join(os.path.dirname(__file__), '../data/summarize_replace.csv')
 replace_list_df = pd.read_csv(replace_list_path, header=None)
-replace_list = replace_list_df.iloc[:,0].tolist()
+replace_list = replace_list_df.iloc[:,0].to_list()
+
+#省くフッターりすと
+replace_footer_list_path = os.path.join(os.path.dirname(__file__), '../data/summarize_footer_replace.csv')
+replace_footer_list_df = pd.read_csv(replace_footer_list_path, header=None)
+replace_footer_list = replace_footer_list_df.iloc[:,0].to_list()
 
 # 並列で要約処理を回す
 def summarize_in_parallel(documents, max_workers=5):
@@ -47,58 +52,84 @@ def summarize_in_parallel(documents, max_workers=5):
     
     return results
 
+# ヘッダー部分を削除
+def clean_header(text):
+    
+    # 不要なブランクを削除
+    text = re.sub(r'\s+', '', text).strip()
+    
+    # 正規表現パターンをまとめておく
+    patterns = [
+        (r'https?://[a-zA-Z0-9.-]+\.(?:com|jp|net|org|co\.jp|biz|info|gov|edu|io|ai)(?:/[A-Za-z/]*)?(?=[^A-Za-z/]|$)', 'url'),  # URLを適切に切る
+        (r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}', 'email'),  # メールアドレス
+        (r'(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', 'phone_header'),  # 電話ヘッダ
+        (r'(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', 'phone_number')  # 電話番号
+    ]
+    
+    # 各パターンで処理
+    for pattern, label in patterns:
+        match = re.search(pattern, text)
+        if match and match.start() <= 200:
+            # マッチした部分までを削除
+            text = re.sub(r'^.*?' + pattern, '', text, count=1)
+
+    return text
+    
+    # header = text
+    
+    # # URLまでを削除
+    # match = re.search(r'https?://[^\s()<>]+(?:\([^\)]*\)|[^\s`!()\[\]{};:.,?–_])', header)
+    # if match and match.start() <= 200:
+    #     # URLまでを削除
+    #     header = re.sub(r'^.*?https?://[^\s()<>]+(?:\([^\)]*\)|[^\s`!()\[\]{};:.,?–_])', '', header, count=1)
+        
+    # match = re.search(r'@[^@\s]+\.[a-z]+(?:\.[a-z]+)?', header)
+    # if match and match.start() <= 200:
+    #     header = re.sub(r'^.*?(@[^@\s]+\.[a-z]+(?:\.[a-z]+)?)', '', header, count=1)
+    
+    # # 不要なブランクを削除
+    # header = re.sub(r'\s+', '', header).strip()
+    
+    # # 電話番号ヘッダまでを削除
+    # match = re.search(r'(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', header)
+    # if match and match.start() <= 200:
+    #     header = re.sub(r'^.*?(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', '', header, count=1)
+    
+    # # 電話番号までを削除
+    # match = re.search(r'(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', header)
+    # if match and match.start() <= 200:
+    #     header = re.sub(r'^.*?(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', '', header, count=1)
+
+    # return header
+
+# footer部分を削除
+def clean_footer(text):
+    
+    # すべての "以上" の位置を取得
+    matches = list(re.finditer('|'.join(map(re.escape, replace_footer_list)), text))
+    
+    if matches:
+        last_match = matches[-1]  # 最後の "以上" を取得
+        if last_match.start() >= len(text) - 200:
+            text = text[:last_match.start()] if last_match.start() > 0 else text  # 最後の "以上" の直前までを取得
+
+    return text
+
 # 開示文章内から不要な文章を削除
 def clean_text(text):
     
-    # URLまでを削除
-    match = re.search(r'https?://[^\s()<>]+(?:\([^\)]*\)|[^\s`!()\[\]{};:.,?–_])', text)
-    if match and match.start() <= 200:
-        # URLまでを削除
-        text = re.sub(r'^.*?https?://[^\s()<>]+(?:\([^\)]*\)|[^\s`!()\[\]{};:.,?–_])', '', text, count=1)
-        
-    match = re.search(r'@[^@\s]+\.[a-z]+(?:\.[a-z]+)?', text)
-    if match and match.start() <= 200:
-        text = re.sub(r'^.*?(@[^@\s]+\.[a-z]+(?:\.[a-z]+)?)', '', text, count=1)
+    # ヘッダー部分を削除
+    text = clean_header(text)
     
-    text = re.sub(r'\s+', '', text).strip()
+    # フッター部分を削除
+    text = clean_footer(text)
     
-    # 電話番号ヘッダまでを削除
-    match = re.search(r'(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', text)
-    if match and match.start() <= 200:
-        text = re.sub(r'^.*?(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', '', text, count=1)
-    
-    # 電話番号までを削除
-    match = re.search(r'(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', text)
-    if match and match.start() <= 200:
-        text = re.sub(r'^.*?(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', '', text, count=1)
-        
-    # # 証券会社までを削除
-    # match = re.search(r'(東証|名証|札証|大証|福証)', text)
-    # if match and match.start() <= 200:
-    #     text = re.sub(r'^.*?(東証|名証|札証|大証|福証)', '', text, count=1)
-        
-    # all right reserved系は全部消す
-    pattern = r'[\s\W]*?(Ｒｅｓｅｒｖｅｄ|ｒｅｓｅｒｖｅｄ|ＲＩＧＨＴ|ｒｉｇｈｔ|ＲＩＧＨＴＳ|ｒｉｇｈｔｓ|' \
-          r'Ａｌｌ|ａｌｌ|Ｌｔｄ．|ｌｔｄ．|ＣＯ．|ｃｏ．|Ｒｉｇｈｔｓ|ｒｉｇｈｔｓ|' \
-          r'Reserved|Reserved\.|reserved|RIGHT|right|Right|RIGHTS|rights|All|all|Ltd\.|ltd\.|CO\.|co\.)[\s\W]*?'
-    text = re.sub(pattern, '', text)
-    
-    # 以上以降を削除
-    text = re.sub(r'以上.*$', '', text)
-    
-    # copyright、sectionを。に
-    replace_phrases = ['©', 'copyright', 'Copyright', 'section', 'Section']
-    text = re.sub('|'.join(map(re.escape, replace_phrases)), '。', text)
+    # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
+    text = re.sub('|'.join(map(re.escape, replace_list)), '。', text)
 
-    # 残った部分の前後の不要な空白を削除
-    text = text.strip()
+    # 最終クリーン
     text = re.sub(r'\(\)|（）|[\(\)]{1}', '', text)
-    
-    # 7. 余分なスペースや空行を削除
     text = re.sub(r'\s+', '', text).strip()
-    text = re.sub(r'[・「」〈〉]', '', text)  # 特殊記号を削除（必要に応じて追加）
-    
-    # 先頭が)とか）とかの場合
     text = re.sub(r'^[）\)]', '', text)
     text = text.strip()
 

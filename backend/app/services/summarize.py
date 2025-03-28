@@ -31,6 +31,16 @@ replace_footer_list_path = os.path.join(os.path.dirname(__file__), '../data/summ
 replace_footer_list_df = pd.read_csv(replace_footer_list_path, header=None)
 replace_footer_list = replace_footer_list_df.iloc[:,0].to_list()
 
+# 重要単語リスト
+important_keywords_list_path = os.path.join(os.path.dirname(__file__), '../data/important_keywords.csv')
+important_keywords_list_df = pd.read_csv(important_keywords_list_path, header=None)
+important_keywords = important_keywords_list_df.iloc[:,0].to_list()
+
+# 重要度低いリスト
+low_priority_keywords_list_path = os.path.join(os.path.dirname(__file__), '../data/low_priority_keywords.csv')
+low_priority_keywords_list_df = pd.read_csv(low_priority_keywords_list_path, header=None)
+low_priority_keywords = low_priority_keywords_list_df.iloc[:,0].to_list()
+
 # 並列で要約処理を回す
 def summarize_in_parallel(documents, max_workers=5):
 
@@ -91,11 +101,13 @@ def clean_text(text):
     text = clean_footer(text)
     
     # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
-    text = re.sub('|'.join(map(re.escape, replace_list)), '。', text)
+    text = re.sub('|'.join(map(re.escape, replace_list)), '', text)
 
     # 最終クリーン
+    text = re.sub(r'。+', '。', text)
     text = re.sub(r'\(\)|（）|[\(\)]{1}', '', text)
     text = re.sub(r'\s+', '', text).strip()
+    text = re.sub(r'^（代表）', '', text)
     text = re.sub(r'^[）\)]', '', text)
     text = text.strip()
 
@@ -138,12 +150,15 @@ def split_sentences_with_janome(text):
         current_sentence = ''.join(sentence).lower()  # 現在の文の小文字変換
         
         # 括弧の判定
-        if token.surface in ['(', '（']:
+        if re.search(r'[（(]', token.surface):
             inside_parentheses += 1
-        elif token.surface in [')', '）']:
+        elif re.search(r'[）)]', token.surface):
             inside_parentheses -= 1
         
         # 括弧内でない場合のみ分割トリガー
+        if token_lower in ['。']:
+            test = ''
+            
         if inside_parentheses == 0 and token_lower in ['。', '！', '？']:
             sentence.append(token.surface)
 
@@ -215,11 +230,11 @@ def summarize_long_document(document, num_sentences=5, max_token_length=512, str
     # 4. スコアの高い順に文を選択 
     ranked_sentences = sorted(((scores[i], s) for i, s in enumerate(sentences)), reverse=True)
 
-    # 重要なキーワードを含む文を優先的に選ぶ
-    important_keywords = ['通期', '上場廃止', '大幅', '世界初', '史上初', '業界初']
-
     # 重要な文を抽出
     important_sentences = [s for s in sentences if any(keyword in s for keyword in important_keywords)]
+
+    # 目次関連の文を低ランクに調整
+    low_priority_sentences = [s for s in sentences if any(keyword in s for keyword in low_priority_keywords)]
 
     # 重要な文を2つまでに制限
     important_sentences = important_sentences[:2]
@@ -228,11 +243,16 @@ def summarize_long_document(document, num_sentences=5, max_token_length=512, str
     important_sentences_set = set(important_sentences)
     non_important_ranked_sentences = [s[1] for s in ranked_sentences if s[1] not in important_sentences_set]
 
-    # 重要な文を追加した後に、num_sentencesに収まるように調整
-    remaining_sentences_count = num_sentences - len(important_sentences)
+    # summary_sentencesを初期化
+    summary_sentences = []  # 空リストとして初期化
 
-    # 残りの文を選ぶ
+    # 重要な文とランキング文の重複を避けた後に、残りの文を選定
+    remaining_sentences_count = num_sentences - len(important_sentences)
     remaining_sentences = non_important_ranked_sentences[:remaining_sentences_count]
+
+    # 目次関連の文を最後に追加して、低ランクで加える
+    low_priority_sentences = [s for s in low_priority_sentences if s not in summary_sentences]
+    summary_sentences += low_priority_sentences
 
     # 重要な文とランキング文を結合
     summary_sentences = important_sentences + remaining_sentences
@@ -245,7 +265,5 @@ def summarize_long_document(document, num_sentences=5, max_token_length=512, str
 
     # 使われていない文を取得してadjust_summary_lengthに渡す
     unused_sentences = [s[1] for s in ranked_sentences if s[1] not in summary_sentences]
-
-    #print(f'これ返すよー？：{document[:100]}')
 
     return adjust_summary_length(summary, unused_sentences)

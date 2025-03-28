@@ -497,7 +497,7 @@ async def get_summarize_list(
     data_df = data_df[['Link']]
     
     data_df = data_df[~data_df['Link'].apply(is_broken_text)]
-    #data_df = data_df[30:40]
+    #data_df = data_df[68:69]
     
     links = data_df['Link'].tolist()
     

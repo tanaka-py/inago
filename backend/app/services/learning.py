@@ -18,6 +18,11 @@ gcs_list_csv_path = os.getenv('GCS_LIST_CSV_PATH', '')
 
 not_next = os.getenv('NOT_NEXT', 'False').lower() == 'true'
 
+# 対象外開示リスト
+exclude_title_path = os.path.join(os.path.dirname(__file__), '../data/exclude_title.csv')
+exclude_title_df = pd.read_csv(exclude_title_path, header=None)
+exclude_title = exclude_title_df.iloc[:,0].to_list()
+
 # 保存データから学習を行う
 async def learning_from_save_data(
     target_date
@@ -486,7 +491,8 @@ def calculate_change_rate(
   
 # 開示文章とその要約を取得  
 async def get_summarize_list(
-    target_date
+    target_date,
+    is_financial_only
 ):
     # 保存データを取得
     list_key = f'{gcs_list_csv_path}/{target_date}.json'
@@ -494,10 +500,23 @@ async def get_summarize_list(
     
     # 取得jsonを
     data_df = pd.DataFrame(data_list)
+    
+    # 不要タイトルを除く
+    data_df = data_df[~data_df['Title'].str.contains('|'.join(exclude_title), na=False)]
+    
+    # 決算とその他で切り替える
+    finance_Words = ['決算']
+    if is_financial_only:
+        # 決算のみ
+        data_df = data_df[data_df['Title'].str.contains('|'.join(finance_Words), na=False)]
+    else:
+        # 決算以外
+        data_df = data_df[~data_df['Title'].str.contains('|'.join(finance_Words), na=False)]
+    
     data_df = data_df[['Link']]
     
     data_df = data_df[~data_df['Link'].apply(is_broken_text)]
-    #data_df = data_df[68:69]
+    #data_df = data_df[14:15]
     
     links = data_df['Link'].tolist()
     

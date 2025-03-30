@@ -19,6 +19,9 @@ exclusion_title = os.getenv('EXCLUSION_TITLE', '').split(',')
 # PDF取得要約処理の並列ワーカー数
 pdf_summaries_max_workers = int(os.getenv('PDF_SUMMARIES_MAX_WORKERS', 10))
 
+# IRBankの最終日
+irbank_enddate = pd.to_datetime(os.getenv('IRBANK_ENDDATE', ''))
+
 # 一覧データを取得
 async def get_list(
     select_date,
@@ -171,13 +174,16 @@ def get_amonth_finance(
     dfn['Date'] = dfn.index.date.astype(str)  # 日付部分だけ取り出す
     n225 = dfn.to_json(orient='records', lines=False, force_ascii=False)
     
-    # グロース(マザーズ) CSVから
-    growth_file = os.path.join(os.path.dirname(__file__), '../data/growth.csv')
-    growth_df = pd.read_csv(growth_file)
-    growth_df.columns = ['Date', 'Close', 'Open', 'High', 'Low', 'Volume', 'rate']
-    growth_df = growth_df[(start_str_date <= growth_df['Date']) & (growth_df['Date'] < end_str_date)]
-    growth_df= growth_df.sort_values('Date')
-    growth = growth_df.to_json(orient='records', lines=False, force_ascii=False)
+    # グロース(マザーズ) 
+    growth = {}
+    if is_past:
+        # 過去はCSVから
+        growth_file = os.path.join(os.path.dirname(__file__), '../data/growth.csv')
+        growth_df = pd.read_csv(growth_file)
+        growth_df.columns = ['Date', 'Close', 'Open', 'High', 'Low', 'Volume', 'rate']
+        growth_df = growth_df[(start_str_date <= growth_df['Date']) & (growth_df['Date'] < end_str_date)]
+        growth_df= growth_df.sort_values('Date')
+        growth = growth_df.to_json(orient='records', lines=False, force_ascii=False)
     
     return comp, n225, growth
 
@@ -263,6 +269,16 @@ async def get_irbank_list(
         'Name',
         'Title'
     ])
+    
+    check_df = df[pd.to_datetime(df['Date']) <= irbank_enddate]
+    if not check_df.empty:
+        print(f'{irbank_enddate}のデータあり')
+        
+    df = df[pd.to_datetime(df['Date']) > irbank_enddate]
+    
+    if df.empty:
+        print(f'{irbank_enddate}以前のデータしかなかったため終了')
+        return target_page, None
     
     # 証券コードがないものと東証以外は除外
     df_filters = df[

@@ -11,7 +11,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 from concurrent.futures import ThreadPoolExecutor
 import torch.nn.functional as F
 import networkx as nx
-from ..models import header_replace
+from ..models import headerfooter_replace
+
+# 最大要約サイズ
+MAX_SUMMARIZE_LIMIT = 2000
 
 # モデルとトークナイザーを設定
 model_name = 'cl-tohoku/bert-base-japanese'
@@ -25,11 +28,6 @@ model.to(device)
 replace_list_path = os.path.join(os.path.dirname(__file__), '../data/summarize_replace.csv')
 replace_list_df = pd.read_csv(replace_list_path, header=None)
 replace_list = replace_list_df.iloc[:,0].to_list()
-
-#省くフッターりすと
-replace_footer_list_path = os.path.join(os.path.dirname(__file__), '../data/summarize_footer_replace.csv')
-replace_footer_list_df = pd.read_csv(replace_footer_list_path, header=None)
-replace_footer_list = replace_footer_list_df.iloc[:,0].to_list()
 
 # 重要単語リスト
 important_keywords_list_path = os.path.join(os.path.dirname(__file__), '../data/important_keywords.csv')
@@ -70,7 +68,7 @@ def clean_header(text):
     text = re.sub(r'\s+', '', text).strip()
     
     # 各パターンで処理
-    for pattern, label in header_replace.PATTERNS:
+    for pattern, label in headerfooter_replace.PATTERNS_HEADER:
         match = re.search(pattern, text)
         if match and match.start() <= 200:
             # マッチした部分までを削除
@@ -82,12 +80,21 @@ def clean_header(text):
 def clean_footer(text):
     
     # すべての "以上" の位置を取得
-    matches = list(re.finditer('|'.join(map(re.escape, replace_footer_list)), text))
+    matches = list(re.finditer(r'以上', text))
     
     if matches:
         last_match = matches[-1]  # 最後の "以上" を取得
         if last_match.start() >= len(text) - 200:
-            text = text[:last_match.start()] if last_match.start() > 0 else text  # 最後の "以上" の直前までを取得
+            text = text[:last_match.start()]    #直前までをリセット
+
+    # 以上を削除したあとまだあるフッター要素を削除
+    patterns = [pattern for pattern, _ in headerfooter_replace.PATTERNS_FOTTER]
+    matches = list(re.finditer('|'.join(map(re.escape, patterns)), text))
+
+    if matches:
+        last_match = matches[-1]
+        if last_match.start() >= len(text) - 200:
+            text = text[:last_match.start()]    #直前までをリセット
 
     return text
 
@@ -101,7 +108,7 @@ def clean_text(text):
     text = clean_footer(text)
     
     # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
-    text = re.sub('|'.join(map(re.escape, replace_list)), '', text)
+    text = re.sub('|'.join(map(re.escape, replace_list)), '。', text)
 
     # 最終クリーン
     text = re.sub(r'。+', '。', text)
@@ -143,7 +150,7 @@ def split_sentences_with_janome(text):
     sentence = []
     
     # 括弧内フラグ
-    inside_parentheses = 0  # 0: 外、1: ( または （ の中、2: ) または ）の中
+    inside_parentheses = False
 
     for token in tokenizer.tokenize(text):
         token_lower = token.surface.lower()  # 小文字変換
@@ -151,15 +158,15 @@ def split_sentences_with_janome(text):
         
         # 括弧の判定
         if re.search(r'[（(]', token.surface):
-            inside_parentheses += 1
-        elif re.search(r'[）)]', token.surface):
-            inside_parentheses -= 1
+            inside_parentheses = True
+        if re.search(r'[）)]', token.surface):
+            inside_parentheses = False
         
         # 括弧内でない場合のみ分割トリガー
         if token_lower in ['。']:
             test = ''
             
-        if inside_parentheses == 0 and token_lower in ['。', '！', '？']:
+        if not inside_parentheses and token_lower in ['。', '！', '？']:
             sentence.append(token.surface)
 
             # ここまでを確定
@@ -180,13 +187,13 @@ def split_sentences_with_janome(text):
     return sentences
 
 # 要約文字数調整
-def adjust_summary_length(summary, sentences, target_length=2000):
+def adjust_summary_length(summary, unused_sentences, target_length=MAX_SUMMARIZE_LIMIT):
     # もしsummaryが短すぎる場合、追加の文章を連結
     if len(summary) < target_length:
-        remaining_sentences = [s for s in sentences if s not in summary]
-        for s in remaining_sentences:
-            if len(summary) + len(s) <= target_length:
-                summary += s
+        for s in unused_sentences:
+            sentence = s[1]
+            if len(summary) + len(sentence) <= target_length:
+                summary += sentence
             else:
                 break
 
@@ -196,7 +203,7 @@ def adjust_summary_length(summary, sentences, target_length=2000):
     return summary
 
 # 要約メイン処理
-def summarize_long_document(document, num_sentences=5, max_token_length=512, stride=256):
+def summarize_long_document(document, max_token_length=512, stride=256):
     #print(f'{document[:100]}の開始')
     
     """
@@ -206,15 +213,19 @@ def summarize_long_document(document, num_sentences=5, max_token_length=512, str
     # 文書をクリーンアップ
     document = clean_text(document)
     
-    if len(document) <= 2000:
-        print('2000文字以内のためそのまま返却')
-        return document
-    
     # 文の分割
     sentences = split_sentences_with_janome(document)
     
     if not sentences:
         return ""
+    
+    if len(document) <= 2000:
+        print('2000文字以内のため低クオリティだけ省く')
+        non_low_priority_sentences = [
+           sentence for sentence in sentences
+           if not any(keywords in sentence for keywords in low_priority_keywords)
+        ]
+        return ''.join(non_low_priority_sentences)
     
     # 1. BERTの文埋め込みを取得
     sentence_embeddings = get_sentence_embeddings(sentences, model, tokenizer, device, max_token_length)
@@ -227,43 +238,31 @@ def summarize_long_document(document, num_sentences=5, max_token_length=512, str
     graph = nx.from_numpy_array(similarity_matrix)
     scores = nx.pagerank(graph)
     
-    # 4. スコアの高い順に文を選択 
-    ranked_sentences = sorted(((scores[i], s) for i, s in enumerate(sentences)), reverse=True)
-
-    # 重要な文を抽出
-    important_sentences = [s for s in sentences if any(keyword in s for keyword in important_keywords)]
-
-    # 目次関連の文を低ランクに調整
-    low_priority_sentences = [s for s in sentences if any(keyword in s for keyword in low_priority_keywords)]
-
-    # 重要な文を2つまでに制限
-    important_sentences = important_sentences[:2]
-
-    # 重要な文とランキング文の重複を避ける
-    important_sentences_set = set(important_sentences)
-    non_important_ranked_sentences = [s[1] for s in ranked_sentences if s[1] not in important_sentences_set]
-
-    # summary_sentencesを初期化
-    summary_sentences = []  # 空リストとして初期化
-
-    # 重要な文とランキング文の重複を避けた後に、残りの文を選定
-    remaining_sentences_count = num_sentences - len(important_sentences)
-    remaining_sentences = non_important_ranked_sentences[:remaining_sentences_count]
-
-    # 目次関連の文を最後に追加して、低ランクで加える
-    low_priority_sentences = [s for s in low_priority_sentences if s not in summary_sentences]
-    summary_sentences += low_priority_sentences
-
-    # 重要な文とランキング文を結合
-    summary_sentences = important_sentences + remaining_sentences
-
-    # 重要な文とTextRankの文を元の順番に並べるために、インデックスマップを作成
-    sentence_indices = {s: i for i, s in enumerate(sentences)}
-
-    # summary_sentencesの順番を元のsentencesのインデックスに基づいて並べ替え
-    summary = ''.join(sorted(summary_sentences, key=lambda s: sentence_indices[s]))
-
-    # 使われていない文を取得してadjust_summary_lengthに渡す
-    unused_sentences = [s[1] for s in ranked_sentences if s[1] not in summary_sentences]
-
-    return adjust_summary_length(summary, unused_sentences)
+    # 4. 重要度と高いと低いで重みづけ
+    ranked_sentences = sorted(
+        ((scores[i] 
+        + (100 if any(keyword in s for keyword in important_keywords) else 0)  # 重要文なら+100
+        - (100 if any(keyword in s for keyword in low_priority_keywords) else 0), s)  # 低優先なら-100
+        for i, s in enumerate(sentences)), 
+        reverse=True
+    )
+    
+    # 最大文字数までいれていく
+    total_length = 0
+    summary_sentences = []
+    for score, sentence in ranked_sentences:
+        if score < 0:    #優先度がマイナスになってるのは飛ばす(つまり登録しない)
+            continue
+        
+        if MAX_SUMMARIZE_LIMIT < len(sentence): # 一つでマックス超えるのは飛ばす
+            continue
+        
+        if MAX_SUMMARIZE_LIMIT < total_length + len(sentence):
+            break
+        
+        summary_sentences.append(sentence)
+        total_length += len(sentence)
+        
+    summary = ''.join(summary_sentences)
+    
+    return summary

@@ -150,7 +150,7 @@ def in_parallel(urls, max_workers=10):
 
     results = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_url = [executor.submit(summarize_pdf, url) for url in urls]
+        future_to_url = {executor.submit(summarize_pdf, url) : url for url in urls}
         for future in future_to_url:
             url = future_to_url[future]
             try:

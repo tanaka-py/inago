@@ -14,7 +14,7 @@ const comparisonModal = ref(null)
 const showModal = ref(false)
 
 // 対象日の要約リストを取得
-const getSummarizeList = async () => {
+const getSummarizeList = async (is_finance_only) => {
   if (!selected_date.value) {
     alert('日付いれいや')
     return
@@ -25,6 +25,7 @@ const getSummarizeList = async () => {
   try {
     let params = {
       date: selected_date.value,
+      is_finance_only: is_finance_only
     }
 
     let summarize_res = await axios.post('/disclosure/summarizelist', params)
@@ -74,7 +75,10 @@ const closeModal = () => {
     <!-- ボタン -->
     <div class="row mt-3">
       <div class="col d-flex justify-content-between">
-        <button class="btn btn-danger" @click="getSummarizeList">取得表示</button>
+        <button class="btn btn-danger" @click="getSummarizeList(is_finance_only=true)">決算取得表示</button>
+      </div>
+      <div class="col d-flex justify-content-between">
+        <button class="btn btn-info" @click="getSummarizeList(is_finance_only=false)">決算なし取得表示</button>
       </div>
     </div>
 

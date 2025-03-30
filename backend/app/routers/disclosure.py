@@ -53,6 +53,11 @@ async def upload_disclosure(item: LearningItem):
         target_page
         )
     
+    if df is None or df.empty:
+        return {
+            'message': '開示が取得できなかったため終了'
+            }
+    
     # 保存用の日付のみのキー取得
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     df['DateKey'] = df['Date'].dt.strftime('%Y-%m-%d')
@@ -107,10 +112,12 @@ async def learning_disclosure(item: LearningItem):
         'message': item.date
         }
 
-# 開示とその要約したリストを取得
+# 開示とその要約したリストを取得（決算or決算以外）
+# LearningItem.is_finance_onlyで管理
 @router.post('/summarizelist')
-async def confirm_summarize(item: LearningItem):
-    return await learning.get_summarize_list(item.date)
+async def confirm_summarize_financial(item: LearningItem):
+    return await learning.get_summarize_list(item.date, is_financial_only=item.is_finance_only)
+    
     
 @router.get('/dummylist/{select_date}')
 async def get_dummylist():

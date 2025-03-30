@@ -21,18 +21,18 @@ import LoadingSpinner from '@/components/LoadingSpinner.vue'
             <div class="collapse navbar-collapse">
               <ul class="navbar-nav">
                 <li class="nav-item">
-                  <RouterLink to="/learning" class="nav-link" active-class="active-link"
-                    >学習</RouterLink
-                  >
-                </li>
-                <li class="nav-item">
                   <RouterLink to="/disclosure" class="nav-link" active-class="active-link"
                     >本日の開示</RouterLink
                   >
                 </li>
                 <li class="nav-item">
+                  <RouterLink to="/learning" class="nav-link" active-class="active-link"
+                    >学習</RouterLink
+                  >
+                </li>
+                <li class="nav-item">
                   <RouterLink to="/summarize" class="nav-link" active-class="active-link">
-                    要約確認
+                    各種デバッグページ
                   </RouterLink>
                 </li>
               </ul>

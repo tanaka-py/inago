@@ -133,9 +133,9 @@ watch(inago_list, (newList) => {
 })
 
 onMounted(() => {
-  nextTick(() => {
-    callList()
-  })
+  // nextTick(() => {
+  //   callList()
+  // })
 })
 </script>
 

@@ -9,6 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter
 import pandas as pd
 from ..schemas.pressrelease import PressReleaseItem
+from ..services import learning
 
 router = APIRouter()
 
@@ -16,6 +17,8 @@ router = APIRouter()
 pressrelease_api = os.getenv('PRESSRELEASE_API', '')
 # 処理対象ページを取得
 scraping_max_page = int(os.getenv('SCRAPING_MAX_PAGE', 1))
+# 収集データを保存して次のページへ行くかどうか
+not_next = os.getenv('NOT_NEXT', 'False').lower() == 'true'
 
 # プレスリリースの一覧を取得して返却
 @router.get('/list/{select_date}')
@@ -66,9 +69,10 @@ async def get_pressrelease(select_date):
             
             # <p>タグを改行に置き換える
             link = article.get('text', '').strip()
-            link = re.sub(r'</?p>', '\n', link) # Pを改行
+            link = re.sub(r'</?p>', '', link) # Pを改行 ブランクに
             link = re.sub(r'<[^>]+>', '', link) # それ以外のタグは削除
-            link = re.sub(r'\n+', '\n', link).strip() # 余計な空白も削除
+            link = re.sub(r'\n+', '', link).strip() # 余計な空白も削除
+            link = re.sub(r'\s+', '', link).strip() # 余計な空白も削除
             
             # 日付と時刻を取得
             time = article.get('updated_at', '').get('time_iso_8601', '').strip()
@@ -96,6 +100,11 @@ async def get_pressrelease(select_date):
         'Place',
         'History'
     ])
+    
+    if not not_next:
+        # consleに開示をアップロードする
+        df['Date'] = select_date
+        await learning.upload_disclosure_from_list(df[['Date','Code', 'Name', 'Title', 'Link']])
     
     return {
         'datalist': df.to_dict(orient="records")

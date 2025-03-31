@@ -96,6 +96,7 @@ async def get_list(
             'Place'
         ]
     ]
+    
     # 証券コードがないものと東証以外は除外
     df_filters = df_filters[
         df_filters['Code'].str.strip().notna() &
@@ -115,7 +116,7 @@ async def get_list(
     
     # ThreadPoolExecutorを使用した並列処理
     summaries = process_pdf.in_parallel(urls, max_workers=pdf_summaries_max_workers)
-    df_filters['Link'] = df_filters['Link'].map(summaries)
+    df_filters['Link'] = df_filters['Link'].map(lambda x: re.sub(r"\s+", " ", str(summaries.get(x, ""))).strip())
     
     #summaries = process_pdf.in_parallel_multiprocessing(urls, max_workers=pdf_summaries_max_workers)
     #df_filters['Link'] = summaries

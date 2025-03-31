@@ -42,9 +42,10 @@ def upload_list(
             # 新規データを既存リストに追加
             new_json = json.loads(json_data)
             
-            #
+            # CodeとTitleの組み合わせをキーとして重複を削除
+            unique_data = { (item["Code"], item["Title"]): item for item in existing_json }.values()
             
-            existing_json.extend(new_json)
+            existing_json.extend(unique_data)
             
             # json形式へ
             update_data = json.dumps(existing_json, ensure_ascii=False)

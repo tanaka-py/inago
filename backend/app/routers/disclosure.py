@@ -26,8 +26,15 @@ async def get_tdnetlist(select_date):
         scraping_max_page
         )
     
-    # NaNをNoneに変換
-    df = df.where(pd.notnull(df), None)
+    if df is None or df.empty:
+        return {
+            'datalist': []
+        }
+        
+    if not not_next:
+        # consleに開示をアップロードする
+        df['Date'] = select_date
+        await learning.upload_disclosure_from_list(df[['Date','Code', 'Name', 'Title', 'Link']])
     
     return {
         'datalist': df.to_dict(orient='records')
@@ -58,32 +65,9 @@ async def upload_disclosure(item: LearningItem):
             'message': '開示が取得できなかったため終了'
             }
     
-    # 保存用の日付のみのキー取得
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    df['DateKey'] = df['Date'].dt.strftime('%Y-%m-%d')
-    
-    # NaNをNoneに変換
-    df = df.where(pd.notnull(df), None)
-    
-    # 日付がないものはここで省く
-    df = df[df['Date'].notna()]
-    
-    # 一か月の株価情報を取得
-    df[['Stock', 'N225', 'Growth']] = df.apply(
-        lambda row: pd.Series(disclosure.get_amonth_finance(row['Code'], row['Date'])), axis=1
-        )
-    
     if not not_next:
-        # 日付別にアップロード
-        grouped_dfs = [group for _, group in df.groupby('DateKey')]
-        for item_df in grouped_dfs:
-            date_key = item_df['DateKey'].iloc[0]
-            
-            #jsonをGCSに保存
-            googleapi.upload_list(
-                item_df,
-                f'{gcs_list_csv_path}/{date_key}.json'
-            )
+        # consleに開示をアップロードする
+        await learning.upload_disclosure_from_list(df)
             
         # 全てが完了したら次のリンクをファイルに保存
         with open(nextlink_path, 'w', encoding='utf-8') as f:

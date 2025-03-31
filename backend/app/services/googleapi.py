@@ -41,6 +41,9 @@ def upload_list(
             
             # 新規データを既存リストに追加
             new_json = json.loads(json_data)
+            
+            #
+            
             existing_json.extend(new_json)
             
             # json形式へ

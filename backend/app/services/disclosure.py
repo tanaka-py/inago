@@ -7,6 +7,7 @@ from datetime import datetime
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
 from bs4 import BeautifulSoup
+from . import pressrelease
 
 # 環境変数からTdnetの一覧URLを取得
 tdnet_listurl = os.getenv('TDNET_LISTURL', '')
@@ -78,6 +79,10 @@ async def get_list(
                 
     if not all_page_data:   # データが取得出来てない場合は終了
         return None
+    
+    # プレスリリースからの分も加える
+    if pressreleaselist := await pressrelease.get_pressrelease(select_date):
+        all_page_data.append(pressreleaselist)
                 
     df = pd.DataFrame(all_page_data,columns=[
         'Time',

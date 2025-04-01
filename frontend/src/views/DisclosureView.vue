@@ -65,15 +65,16 @@ const callList = async () => {
   nextTick(async () => {
     try {
       let tdnet_list = axios.get(`/disclosure/tdnetlist/${selectedDate.value.replace(/-/g, '')}`)
-      let pressrelease_list = axios.get(`/pressrelease/list/${selectedDate.value}`)
+      //let pressrelease_list = axios.get(`/pressrelease/list/${selectedDate.value}`)
 
       // 同時に取得
-      let responses = await Promise.all([tdnet_list, pressrelease_list])
-      let [tdnet_res, pressrelease_res] = responses
+      let responses = await Promise.all([tdnet_list])
+      let [tdnet_res] = responses
+      //let responses = await Promise.all([tdnet_list, pressrelease_list])
+      //let [tdnet_res, pressrelease_res] = responses
 
       // 取得したものを結合して時間順にソート
       inago_list.value = tdnet_res.data.datalist
-        .concat(pressrelease_res.data.datalist)
         .sort((a, b) => {
           let b_time = new Date(`${selectedDate.value.replace(/-/g, '/')} ${b.Time}:00`)
           let a_time = new Date(`${selectedDate.value.replace(/-/g, '/')} ${a.Time}:00`)

@@ -38,17 +38,18 @@ def upload_list(
         if existing_data.strip():  # 既存データが空でない場合
             # 既存データをJSONとしてパースし、リストに変換
             existing_json = json.loads(existing_data)
+            new_json = json.loads(json_data)
             
             # 新規データを既存リストに追加
-            new_json = json.loads(json_data)
+            existing_json.extend(new_json)
             
             # CodeとTitleの組み合わせをキーとして重複を削除
             unique_data = { (item["Code"], item["Title"]): item for item in existing_json }.values()
             
-            existing_json.extend(unique_data)
+            result = list(unique_data)
             
             # json形式へ
-            update_data = json.dumps(existing_json, ensure_ascii=False)
+            update_data = json.dumps(result, ensure_ascii=False)
         else:
             update_data = json_data  # 空の場合、データはそのまま
     else:

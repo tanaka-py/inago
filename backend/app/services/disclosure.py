@@ -76,6 +76,9 @@ async def get_list(
             if len(cols) > 0:  # 行が空でない場合
                 all_page_data.append(cols)
                 
+    if not all_page_data:   # データが取得出来てない場合は終了
+        return None
+                
     df = pd.DataFrame(all_page_data,columns=[
         'Time',
         'Code',

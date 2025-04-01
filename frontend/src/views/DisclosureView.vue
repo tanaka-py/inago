@@ -65,7 +65,7 @@ const callList = async () => {
   nextTick(async () => {
     try {
       let tdnet_list = axios.get(`/disclosure/tdnetlist/${selectedDate.value.replace(/-/g, '')}`)
-      let pressrelease_list = axios.get(`/pressrelease/dummy/${selectedDate.value}`)
+      let pressrelease_list = axios.get(`/pressrelease/list/${selectedDate.value}`)
 
       // 同時に取得
       let responses = await Promise.all([tdnet_list, pressrelease_list])

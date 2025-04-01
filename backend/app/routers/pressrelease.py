@@ -101,6 +101,10 @@ async def get_pressrelease(select_date):
         'History'
     ])
     
+    # コードがないのは省く intはstrに
+    df = df[pd.notna(df['Code'])]
+    df['Code'] = df['Code'].astype(str)
+    
     if not not_next:
         # consleに開示をアップロードする
         df['Date'] = select_date

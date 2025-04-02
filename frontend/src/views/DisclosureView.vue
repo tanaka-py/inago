@@ -64,7 +64,7 @@ const callList = async () => {
   inago_list.value = init_list
   nextTick(async () => {
     try {
-      let tdnet_list = axios.get(`/disclosure/tdnetlist/${selectedDate.value.replace(/-/g, '')}`)
+      let tdnet_list = axios.get(`/disclosure/tdnetlist/${selectedDate.value}`)
       //let pressrelease_list = axios.get(`/pressrelease/list/${selectedDate.value}`)
 
       // 同時に取得
@@ -74,12 +74,11 @@ const callList = async () => {
       //let [tdnet_res, pressrelease_res] = responses
 
       // 取得したものを結合して時間順にソート
-      inago_list.value = tdnet_res.data.datalist
-        .sort((a, b) => {
-          let b_time = new Date(`${selectedDate.value.replace(/-/g, '/')} ${b.Time}:00`)
-          let a_time = new Date(`${selectedDate.value.replace(/-/g, '/')} ${a.Time}:00`)
-          return b_time - a_time
-        })
+      inago_list.value = tdnet_res.data.datalist.sort((a, b) => {
+        let b_time = new Date(`${selectedDate.value.replace(/-/g, '/')} ${b.Time}:00`)
+        let a_time = new Date(`${selectedDate.value.replace(/-/g, '/')} ${a.Time}:00`)
+        return b_time - a_time
+      })
     } catch (error) {
       alert(`call_error! ★tdnet detail=[${error}]`)
     } finally {

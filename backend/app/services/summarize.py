@@ -13,9 +13,6 @@ import torch.nn.functional as F
 import networkx as nx
 from ..models import headerfooter_replace
 
-# 最大要約サイズ
-MAX_SUMMARIZE_LIMIT = 2000
-
 # モデルとトークナイザーを設定
 model_name = 'cl-tohoku/bert-base-japanese'
 tokenizer = BertJapaneseTokenizer.from_pretrained(model_name)
@@ -186,24 +183,8 @@ def split_sentences_with_janome(text):
     
     return sentences
 
-# 要約文字数調整
-def adjust_summary_length(summary, unused_sentences, target_length=MAX_SUMMARIZE_LIMIT):
-    # もしsummaryが短すぎる場合、追加の文章を連結
-    if len(summary) < target_length:
-        for s in unused_sentences:
-            sentence = s[1]
-            if len(summary) + len(sentence) <= target_length:
-                summary += sentence
-            else:
-                break
-
-    # もしsummaryが長すぎる場合、カット
-    summary = summary[:target_length]
-
-    return summary
-
 # 要約メイン処理
-def summarize_long_document(document, max_token_length=512, stride=256):
+def summarize_long_document(document, max_token_length=512, stride=256, summarize_limit=2000):
     #print(f'{document[:100]}の開始')
     
     """
@@ -219,8 +200,8 @@ def summarize_long_document(document, max_token_length=512, stride=256):
     if not sentences:
         return ""
     
-    if len(document) <= 2000:
-        print('2000文字以内のため低クオリティだけ省く')
+    if len(document) <= summarize_limit:
+        print(f'{summarize_limit}文字以内のため低クオリティだけ省く')
         non_low_priority_sentences = [
            sentence for sentence in sentences
            if not any(keywords in sentence for keywords in low_priority_keywords)
@@ -254,10 +235,10 @@ def summarize_long_document(document, max_token_length=512, stride=256):
         if score < 0:    #優先度がマイナスになってるのは飛ばす(つまり登録しない)
             continue
         
-        if MAX_SUMMARIZE_LIMIT < len(sentence): # 一つでマックス超えるのは飛ばす
+        if summarize_limit < len(sentence): # 一つでマックス超えるのは飛ばす
             continue
         
-        if MAX_SUMMARIZE_LIMIT < total_length + len(sentence):
+        if summarize_limit < total_length + len(sentence):
             break
         
         summary_sentences.append(sentence)

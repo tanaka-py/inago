@@ -33,8 +33,10 @@ async def get_tdnetlist(select_date):
         
     if not not_next:
         # consleに開示をアップロードする
-        df['Date'] = select_date
-        await learning.upload_disclosure_from_list(df[['Date','Code', 'Name', 'Title', 'Link']])
+        await learning.upload_disclosure_from_list(
+            df[['Time','Date','Code', 'Name', 'Title', 'Link']],
+            is_today=True
+            )
     
     return {
         'datalist': df.to_dict(orient='records')

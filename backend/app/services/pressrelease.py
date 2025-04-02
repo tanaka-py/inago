@@ -59,7 +59,7 @@ async def get_pressrelease(select_date):
             name = article.get('provider', '').get('name', '').strip()
             # 上場企業リストからコード逆引き
             result = comp_df.loc[comp_df['Name'].str.contains(to_list_link_text(name)), 'Code']
-            code = result.iloc[0] if not result.empty else None
+            code = str(result.iloc[0]) if not result.empty else None
             
             # <p>タグを改行に置き換える
             link = article.get('text', '').strip()

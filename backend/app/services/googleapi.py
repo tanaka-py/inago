@@ -101,7 +101,7 @@ def download_list(
     # Blobを取得
     blob = bucket.get_blob(blob_name)
     
-    return json.loads(blob.download_as_text())
+    return json.loads(blob.download_as_text()) if blob and blob.exists() else {}
 
 # 学習モデルの保存(torch LSTM)
 def upload_model_torch(

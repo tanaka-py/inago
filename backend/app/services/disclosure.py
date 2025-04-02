@@ -1,13 +1,15 @@
 import os
 import requests
 import re
+import numpy as np
 import pandas as pd
+import asyncio
 from . import process_pdf, yahoofinance, jquants
 from datetime import datetime
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
 from bs4 import BeautifulSoup
-from . import pressrelease
+from . import pressrelease, googleapi, notice
 
 # 環境変数からTdnetの一覧URLを取得
 tdnet_listurl = os.getenv('TDNET_LISTURL', '')
@@ -20,23 +22,27 @@ exclusion_title = os.getenv('EXCLUSION_TITLE', '').split(',')
 # PDF取得要約処理の並列ワーカー数
 pdf_summaries_max_workers = int(os.getenv('PDF_SUMMARIES_MAX_WORKERS', 10))
 
+# 環境変数から会社リストの保存GCSパスを取得
+gcs_list_csv_path = os.getenv('GCS_LIST_CSV_PATH', '')
+
 # IRBankの最終日
 irbank_enddate = pd.to_datetime(os.getenv('IRBANK_ENDDATE', ''))
+
+notice_tasks = set()
 
 # 一覧データを取得
 async def get_list(
     select_date,
     scraping_max_page
     ):
-    # このコメントアウトの部分はもともとのTdnetの一覧部
-    # 結局iframe先のパスが判明したら必要ない
-    #tdnet_url = 'https://www.release.tdnet.info/inbs/I_main_00.html'
-    #response = requests.get(tdnet_url)
+    # まずは前回データを取得
+    # 保存データを取得
+    list_key = f'{gcs_list_csv_path}/{select_date}.json'
+    org_data_list = googleapi.download_list(list_key)
+    org_df = pd.DataFrame(org_data_list)
     
-    # Tdnetの取得ページをスープに
-    #soup = BeautifulSoup(response.text, 'html.parser')
-    # Tdnetソース内のiframeURLを取得
-    #list_frame = soup.find('iframe', id='main_list')['src']
+    # TDnet用日付
+    tdnet_date = datetime.strptime(select_date, '%Y-%m-%d').strftime('%Y%m%d')
     
     # iframe内のリストパスから開示一覧を取得(全ページいっちゃう)
     base_page_path = "I_list_{:03d}_{}.html"
@@ -46,7 +52,7 @@ async def get_list(
     
     for page_num in range(1, scraping_max_page) :  # 設定ページまで(ページにデータがあるかは判定)
     
-        target_list = base_page_path.format(page_num, select_date)
+        target_list = base_page_path.format(page_num, tdnet_date)
         list_url = f'{tdnet_listurl}{target_list}'
         list_response = requests.get(list_url)
         
@@ -79,10 +85,6 @@ async def get_list(
                 
     if not all_page_data:   # データが取得出来てない場合は終了
         return None
-    
-    # プレスリリースからの分も加える
-    if pressreleaselist := await pressrelease.get_pressrelease(select_date):
-        all_page_data.append(pressreleaselist)
                 
     df = pd.DataFrame(all_page_data,columns=[
         'Time',
@@ -132,7 +134,66 @@ async def get_list(
     #　単発
     #df_filters['Link'] = df_filters['Link'].apply(lambda x: process_pdf.summarize_pdf(x))
     
-    return df_filters
+    # プレスリリースからの分も加える
+    if pressreleaselist := await pressrelease.get_pressrelease(select_date):
+        press_df = pd.DataFrame(pressreleaselist,columns=[
+            'Time',
+            'Code',
+            'Name',
+            'Title',
+            'Link',
+            'Place',
+            'History'
+        ])
+        
+        press_df = press_df[[
+            'Time',
+            'Code',
+            'Name',
+            'Title',
+            'Link',
+            'Place'
+        ]]
+        
+        # 扶養なものを省く
+        press_df = press_df[
+            press_df['Code'].str.strip().notna() &
+            (~press_df['Name'].str.contains('|'.join(exclusion_company), case=False, na=False)) &
+            (~press_df['Title'].str.contains('|'.join(exclusion_title), case=False, na=False))
+            ]
+        
+        # 連結
+        df_filters = pd.concat([df_filters, press_df], ignore_index=True)
+    
+    # 5桁のものはコードを修正
+    df_filters['Code'] = df_filters['Code'].apply(lambda code: code.rstrip('0') if len(code) == 5 else code) 
+        
+    # 最後に登録済みと結合
+    df_new = None
+    if org_df.empty:
+        df_new = df_filters
+        merge_df = df_filters
+    else:
+        # 登録済みにないものだけを抽出
+        df_new = df_filters[~df_filters[['Code', 'Title']].apply(tuple, axis=1).isin(
+            org_df[['Code', 'Title']].apply(tuple, axis=1)
+        )]
+        merge_df = pd.concat([org_df, df_new], ignore_index=True)
+    
+    # 最終処理
+    # codeの最後が0の場合は0を省く念のため
+    merge_df['Code'] = merge_df['Code'].apply(lambda code: code.rstrip('0') if len(code) == 5 else code) 
+    merge_df['Date'] = select_date    # 日付をセット
+    merge_df = merge_df.replace([np.nan, np.inf, -np.inf], None)
+    
+    # ここで新規に追加するものに対して処理を行う！
+    # modelから予測を取得してメールなりで送信といった感じで
+    if df_new is not None and not df_new.empty:
+        task = asyncio.create_task(notice.send(df_new))
+        notice_tasks.add(task)
+        task.add_done_callback(notice_tasks.discard)    # タスクが完了したらsetから削除
+    
+    return merge_df
 
 # Title内からPDFへのURLを取得
 def extract_pdfurl(title) :

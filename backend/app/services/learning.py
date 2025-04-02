@@ -526,7 +526,8 @@ async def get_summarize_list(
 
 # 一覧から取得した
 async def upload_disclosure_from_list(
-    df
+    df,
+    is_today = False
 ):
     # 保存用の日付のみのキー取得
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
@@ -539,9 +540,14 @@ async def upload_disclosure_from_list(
     df = df[df['Date'].notna()]
     
     # 一か月の株価情報を取得
-    df[['Stock', 'N225', 'Growth']] = df.apply(
-        lambda row: pd.Series(disclosure.get_amonth_finance(row['Code'], row['Date'])), axis=1
-        )
+    if is_today:
+        # 本日の場合データがないので空で
+        df[['Stock', 'N225', 'Growth']] = df.apply(lambda x: pd.Series({'Stock':{}, 'N225':{}, 'Growth':{}}), axis=1)
+    else:
+        # 株価セット
+        df[['Stock', 'N225', 'Growth']] = df.apply(
+            lambda row: pd.Series(disclosure.get_amonth_finance(row['Code'], row['Date'])), axis=1
+            )
     
     # 日付別にアップロード
     grouped_dfs = [group for _, group in df.groupby('DateKey')]
@@ -549,8 +555,16 @@ async def upload_disclosure_from_list(
         date_key = item_df['DateKey'].iloc[0]
         
         #jsonをGCSに保存
-        googleapi.upload_list(
-            item_df,
-            f'{gcs_list_csv_path}/{date_key}.json'
-        )
+        if is_today:
+            # 完全上書き
+            googleapi.rewrite_list(
+                item_df,
+                f'{gcs_list_csv_path}/{date_key}.json'
+            )
+        else:
+            # 既存データそのままで保存する
+            googleapi.upload_list(
+                item_df,
+                f'{gcs_list_csv_path}/{date_key}.json'
+            )
     

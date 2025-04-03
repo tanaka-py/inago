@@ -9,11 +9,11 @@ const loadingStore = useLoadingStore()
 
 const inago_list = ref([])
 
-const selectedDate = ref(new Date().toISOString().split('T')[0])
+const selectedDate = ref('2022-11-28')
 const tooltipRefs = ref([]) // すべてのTooltipの参照を格納
 
-// Tdnet開示情報を収集
-const callTdnetLearning = async () => {
+// 対象日の学習を行う
+const callLearning = async (work_load) => {
   if (!selectedDate.value) {
     alert('日付いれいや')
     return
@@ -24,7 +24,8 @@ const callTdnetLearning = async () => {
   nextTick(async () => {
     try {
       let params = {
-        date: selectedDate.value.replace(/-/g, ''),
+        date: selectedDate.value,
+        work_load: work_load,
       }
       let tdnet_res = await axios.post('/disclosure/learning', params)
 
@@ -62,30 +63,6 @@ const callTdnetUpload = async () => {
   })
 }
 
-const callPressReleaseLearning = async () => {
-  if (!selectedDate.value) {
-    alert('日付いれいや')
-    return
-  }
-
-  loadingStore.startLoading()
-
-  nextTick(async () => {
-    try {
-      let params = {
-        date: selectedDate.value,
-      }
-      let pressrelease_res = await axios.post('/pressrelease/learning', params)
-
-      alert(pressrelease_res.data.message)
-    } catch (error) {
-      alert(`call_error! ★pressrelease detail=[${error}]`)
-    } finally {
-      loadingStore.stopLoading()
-    }
-  })
-}
-
 onMounted(() => {})
 </script>
 
@@ -103,9 +80,11 @@ onMounted(() => {})
     <div class="row mt-3">
       <div class="col d-flex justify-content-between">
         <button class="btn btn-success" @click="callTdnetUpload">Tdnet開示データ収集</button>
-        <button class="btn btn-secondary" @click="callTdnetLearning">Tdnet開示学習</button>
-        <button class="btn btn-danger" @click="callPressReleaseLearning">
-          プレスリリース開示学習
+        <button class="btn btn-secondary" @click="callLearning((work_load = false))">
+          開示学習
+        </button>
+        <button class="btn btn-warning" @click="callLearning((work_load = true))">
+          開示学習(作業データ読込からデバッグ)
         </button>
       </div>
     </div>

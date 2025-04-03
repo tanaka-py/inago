@@ -10,6 +10,7 @@ import yfinance as yf
 from dateutil.relativedelta import relativedelta
 from bs4 import BeautifulSoup
 from . import pressrelease, googleapi, notice
+import weakref
 
 # 環境変数からTdnetの一覧URLを取得
 tdnet_listurl = os.getenv('TDNET_LISTURL', '')
@@ -28,7 +29,7 @@ gcs_list_csv_path = os.getenv('GCS_LIST_CSV_PATH', '')
 # IRBankの最終日
 irbank_enddate = pd.to_datetime(os.getenv('IRBANK_ENDDATE', ''))
 
-notice_tasks = set()
+notice_tasks = weakref.WeakSet() # 自動管理
 
 # 一覧データを取得
 async def get_list(
@@ -178,6 +179,7 @@ async def get_list(
         df_new = df_filters[~df_filters[['Code', 'Title']].apply(tuple, axis=1).isin(
             org_df[['Code', 'Title']].apply(tuple, axis=1)
         )]
+        df_new['Date'] = select_date    # 日付をセット
         merge_df = pd.concat([org_df, df_new], ignore_index=True)
     
     # 最終処理
@@ -189,9 +191,9 @@ async def get_list(
     # ここで新規に追加するものに対して処理を行う！
     # modelから予測を取得してメールなりで送信といった感じで
     if df_new is not None and not df_new.empty:
-        task = asyncio.create_task(notice.send(df_new))
+        task = asyncio.create_task(notice.send(df_new.copy()))  # コピーを送信する
         notice_tasks.add(task)
-        task.add_done_callback(notice_tasks.discard)    # タスクが完了したらsetから削除
+        task.add_done_callback(lambda t: notice_tasks.discard(t))    # タスクが完了したらsetから削除
     
     return merge_df
 

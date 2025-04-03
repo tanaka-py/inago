@@ -73,7 +73,8 @@ async def get_pressrelease(select_date):
             dt = datetime.fromisoformat(time)
             
             # 日付が変わったら終了
-            if dt.strftime('%Y-%m-%d') != select_date:
+            this_day = dt.strftime('%Y-%m-%d')
+            if this_day != select_date:
                 is_past_date = True
                 break
             

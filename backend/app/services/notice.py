@@ -22,7 +22,7 @@ async def send(
     
     if not filterd_df.empty:
         
-        tasks_list = [summarize_send(row) for row in filterd_df.itertuples()]
+        tasks_list = [summarize_send(row) for row in filterd_df.itertuples(index=False)]
         
         if tasks_list:
             print('送信開始')
@@ -38,6 +38,7 @@ async def send(
 async def summarize_send(
     row
 ):
+    #print(f'{row}を要約して送信')
     # 要約
     text = summarize.summarize_long_document(row.Link, summarize_limit=1000)
     
@@ -46,14 +47,14 @@ async def summarize_send(
 
     # メッセージ作成（マークダウン形式）
     payload = {
-        "text": f'*{row.Date} {row.Time}*  \n*code:* `{row.Code}`  \n---  \n*社名:* {row.Name}  \n{text}',
-        "mrkdwn": True  # ← これが超重要！！！！
+        "text": f'*{getattr(row, "Date", "N/A")} {getattr(row, "Time", "N/A")}*  \n*code:* `{getattr(row, "Code", "N/A")}`  \n---  \n*社名:* {getattr(row, "Name", "N/A")}  \n{text}',
+        "mrkdwn": True  # これによって装飾を反映させる
     }
 
     # 送信
     async with aiohttp.ClientSession() as session:
         async with session.post(slack_url, json=payload) as response:
             if response.status == 200:
-                print(f'code:{row.Code} 社名:{row.Name} 送信OK')
+                print(f'code:{getattr(row, "Code", "N/A")} 社名:{getattr(row, "Name", "N/A")} 送信OK')
             else:
-                print(f'code:{row.Code} 社名:{row.Name} 送信失敗')
+                print(f'code:{getattr(row, "Code", "N/A")} 社名:{getattr(row, "Name", "N/A")} 送信失敗 {response.text}')

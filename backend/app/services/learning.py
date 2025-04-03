@@ -3,7 +3,7 @@ import json
 import yfinance as yf
 from datetime import datetime, timedelta
 import pandas as pd
-from . import googleapi, disclosure, lstm, finance, summarize
+from . import googleapi, disclosure, lstm, finance, summarize, summarize_work
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import numpy as np
@@ -25,248 +25,250 @@ exclude_title = exclude_title_df.iloc[:,0].to_list()
 
 # 保存データから学習を行う
 async def learning_from_save_data(
-    target_date
+    target_date,
+    work_load
     ):
     
-    # 保存データを取得
-    list_key = f'{gcs_list_csv_path}/{target_date}.json'
-    data_list = googleapi.download_list(list_key)
-    
-    # 株価が入ってないものがあれば保存しなおし
-    if not not_next:    # デバッグではとらない
-        data_list = re_get_stock_data(
-            data_list,
-            target_date
-        )
-
-    # 2. 株価データの特徴量作成
+    # 特徴量素材
     features = []
     targets = []
     documents = []
+    document_summaries = []
     debug_data = []
-    
-    total_count = 0
-    
-    print(f'総件数：{len(data_list)}')
-    
-    if not_next:
-        print('デバッグ実行')
-        test = [item['Link'] for item in data_list if not is_broken_text(item['Link'])]
         
-        test_df = pd.DataFrame(test)
-        test_df_path = os.path.join(os.path.dirname(__file__), '../data/documents.csv')
-        test_df.to_csv(test_df_path, index=False)
-        test_2 = summarize.summarize_in_parallel(test)
+    if work_load:
+        # 作業データ読み込み
+        test = ''
+    else:
         
-        test_2_df = pd.DataFrame(test_2)
-        test_2_df_path = os.path.join(os.path.dirname(__file__), '../data/summaries.csv')
-        test_2_df.to_csv(test_2_df_path, index=False)
+        # 保存データを取得
+        list_key = f'{gcs_list_csv_path}/{target_date}.json'
+        data_list = googleapi.download_list(list_key)
         
-        return
-    
+        # 株価が入ってないものがあれば保存しなおし
+        if not not_next:    # デバッグではとらない
+            data_list = re_get_stock_data(
+                data_list,
+                target_date
+            )
 
-    for item in data_list:
-        total_count += 1
+        # 2. 株価データの特徴量作成
+        total_count = 0
         
-        if is_broken_text(item['Link']):
-            print(f'開示文章が文字化けしてるためスルー：{item['Code']}')
-            continue
+        print(f'総件数：{len(data_list)}')
         
-        # if not_next:    # デバッグでは先頭のみ
-        #     if 2 <= total_count:
-        #         break
-        
-        # 過去3か月の株価たちを取得
-        past_start_date = pd.to_datetime(item['Date'])
-        past_stock_json, past_n225_json, past_growth_json = disclosure.get_amonth_finance(
-            item['Code'],
-            past_start_date,
-            True
-        )
-        
-        # JSONデータをDataFrameに変換
-        if not past_stock_json:
-            print(f'過去株価がないため特徴量が入れれないスルー：{item['Code']}') 
-            continue
-        if not past_n225_json:
-            print(f'過去日経株価がないため特徴量が入れれないスルー：{item['Code']}') 
-            continue
-        if not past_growth_json:
-            print(f'過去グロース株価がないため特徴量が入れれないスルー：{item['Code']}') 
-            continue
-        
-        df_stock = pd.DataFrame(json.loads(past_stock_json))
-        df_nikkei = pd.DataFrame(json.loads(past_n225_json))
-        df_mothers = pd.DataFrame(json.loads(past_growth_json))
-        df_stock_targets = pd.DataFrame(json.loads(item['Stock']))  # 結果用
-        
-        if df_stock_targets.empty:
-            print(f'予想用株価がないためスルー：{item['Code']}') 
-            continue
-        
-        # 財務情報を取得
-        wk_stock = df_stock_targets[df_stock_targets['Date'] == target_date]
-        if wk_stock.empty:
-            print(f'{item['Code']}：対象日の財務データがとれないのは対象外')
-            continue
-        else :
-            # いったん時価総額のみの指標とする
-            # aggregated_features = finance.get_financecapitalization_from_csv(
-            #     item['Code'],
-            #     target_date,
-            #     wk_stock.iloc[0]['Open']
-            # )
-            # こっちは各種ファンダメンタル指標も
-            aggregated_features = finance.get_finance_from_csv(
+        for item in data_list:
+            total_count += 1
+            
+            if is_broken_text(item['Link']):
+                print(f'開示文章が文字化けしてるためスルー：{item['Code']}')
+                continue
+            
+            # if not_next:    # デバッグでは先頭のみ
+            #     if 2 <= total_count:
+            #         break
+            
+            # 過去3か月の株価たちを取得
+            past_start_date = pd.to_datetime(item['Date'])
+            past_stock_json, past_n225_json, past_growth_json = disclosure.get_amonth_finance(
                 item['Code'],
-                target_date,
-                wk_stock.iloc[0]['Open']
+                past_start_date,
+                True
             )
             
-        if not isinstance(aggregated_features, dict):
-            print(f'{item['Code']}：財務データがとれないのは対象外')
-            continue
-
-        # 数値データの変換
-        df_stock['Close'] = pd.to_numeric(df_stock['Close'], errors='coerce')
-        df_stock['Volume'] = pd.to_numeric(df_stock['Volume'], errors='coerce')
-        df_stock['Open'] = pd.to_numeric(df_stock['Open'], errors='coerce')
-        df_stock['High'] = pd.to_numeric(df_stock['High'], errors='coerce')
-        df_stock['Low'] = pd.to_numeric(df_stock['Low'], errors='coerce')
-
-        df_nikkei['Close'] = pd.to_numeric(df_nikkei['Close'], errors='coerce')
-        df_nikkei['Open'] = pd.to_numeric(df_nikkei['Open'], errors='coerce')
-        df_nikkei['High'] = pd.to_numeric(df_nikkei['High'], errors='coerce')
-        df_nikkei['Low'] = pd.to_numeric(df_nikkei['Low'], errors='coerce')
-        df_nikkei['Volume'] = pd.to_numeric(df_nikkei['Volume'], errors='coerce')
-
-        df_mothers['Close'] = pd.to_numeric(df_mothers['Close'], errors='coerce')
-        df_mothers['Open'] = pd.to_numeric(df_mothers['Open'], errors='coerce')
-        df_mothers['High'] = pd.to_numeric(df_mothers['High'], errors='coerce')
-        df_mothers['Low'] = pd.to_numeric(df_mothers['Low'], errors='coerce')
-        df_mothers['Volume'] = pd.to_numeric(df_mothers['Volume'], errors='coerce')
-
-        df_stock_targets['Open'] = pd.to_numeric(df_stock_targets['Open'], errors='coerce')
-        df_stock_targets['Close'] = pd.to_numeric(df_stock_targets['Close'], errors='coerce')
-
-        # 変化率（パーセンテージ）
-        df_stock['CloseChange'] = df_stock['Close'].pct_change() * 100  
-        df_nikkei['CloseChange'] = df_nikkei['Close'].pct_change() * 100  
-        df_mothers['CloseChange'] = df_mothers['Close'].pct_change() * 100
-        df_stock_targets['CloseChange'] = df_stock_targets['Close'].pct_change() * 100
-
-        # 開示日
-        disclosure_date = pd.to_datetime(item["DateKey"])
-
-        # 開示日の±200日間のデータを抽出(過去のやつだから)
-        df_stock['DaysSinceDisclosure'] = (pd.to_datetime(df_stock["Date"]) - disclosure_date).dt.days
-        df_stock_recent = df_stock[(df_stock['DaysSinceDisclosure'] >= -200) & (df_stock['DaysSinceDisclosure'] <= 200)]
-
-        df_nikkei['DaysSinceDisclosure'] = (pd.to_datetime(df_nikkei["Date"]) - disclosure_date).dt.days
-        df_nikkei_recent = df_nikkei[df_nikkei['DaysSinceDisclosure'].isin(df_stock_recent['DaysSinceDisclosure'])]
-
-        df_mothers['DaysSinceDisclosure'] = (pd.to_datetime(df_mothers["Date"]) - disclosure_date).dt.days
-        df_mothers_recent = df_mothers[df_mothers['DaysSinceDisclosure'].isin(df_stock_recent['DaysSinceDisclosure'])]
-
-        # --- 📌 株価 vs 指数の相関関係 ---
-        NikkeiCorr = None
-        if not df_stock_recent.empty and not df_nikkei_recent.empty:
-            NikkeiCorr = df_stock_recent["CloseChange"].corr(df_nikkei_recent["CloseChange"])
+            # JSONデータをDataFrameに変換
+            if not past_stock_json:
+                print(f'過去株価がないため特徴量が入れれないスルー：{item['Code']}') 
+                continue
+            if not past_n225_json:
+                print(f'過去日経株価がないため特徴量が入れれないスルー：{item['Code']}') 
+                continue
+            if not past_growth_json:
+                print(f'過去グロース株価がないため特徴量が入れれないスルー：{item['Code']}') 
+                continue
             
-        aggregated_features["NikkeiCorr"] = 0 if NikkeiCorr is None or pd.isna(NikkeiCorr) else NikkeiCorr 
-        
-        MothersCorr = None
-        if not df_stock_recent.empty and not df_mothers_recent.empty:
-            MothersCorr = df_stock_recent["CloseChange"].corr(df_mothers_recent["CloseChange"])
+            df_stock = pd.DataFrame(json.loads(past_stock_json))
+            df_nikkei = pd.DataFrame(json.loads(past_n225_json))
+            df_mothers = pd.DataFrame(json.loads(past_growth_json))
+            df_stock_targets = pd.DataFrame(json.loads(item['Stock']))  # 結果用
             
-        aggregated_features["MothersCorr"] = 0 if MothersCorr is None or pd.isna(MothersCorr) else MothersCorr 
+            if df_stock_targets.empty:
+                print(f'予想用株価がないためスルー：{item['Code']}') 
+                continue
+            
+            # 財務情報を取得
+            wk_stock = df_stock_targets[df_stock_targets['Date'] == target_date]
+            if wk_stock.empty:
+                print(f'{item['Code']}：対象日の財務データがとれないのは対象外')
+                continue
+            else :
+                # いったん時価総額のみの指標とする
+                # aggregated_features = finance.get_financecapitalization_from_csv(
+                #     item['Code'],
+                #     target_date,
+                #     wk_stock.iloc[0]['Open']
+                # )
+                # こっちは各種ファンダメンタル指標も
+                aggregated_features = finance.get_finance_from_csv(
+                    item['Code'],
+                    target_date,
+                    wk_stock.iloc[0]['Open']
+                )
+                
+            if not isinstance(aggregated_features, dict):
+                print(f'{item['Code']}：財務データがとれないのは対象外')
+                continue
+            
+            # 開示日から各ターゲットの日数後の変動率を計算(求める結果)
+            days_list = [0, 3, 7, 14, 21, 28, 35, 42, 49]
+            rates = get_last_valid_change_rate(df_stock_targets, days_list)
+            
+            if any(rate is None or rate == -9999 for rate in rates):
+                print(f'{item['Code']}：結果株価変化率がとれないのは対象外')
+                continue
+            
+            targets.append(rates)
 
-        # --- 📌 テクニカル指標 ---
-        df_stock['RSI'] = calculate_rsi(df_stock['Close'])  # RSI（相対力指数）
-        df_stock['MovingAverage50'] = df_stock['Close'].rolling(window=50, min_periods=1).mean()  # 50日移動平均線
-        df_stock['MovingAverage200'] = df_stock['Close'].rolling(window=200, min_periods=1).mean()  # 200日移動平均線
+            # 数値データの変換
+            df_stock['Close'] = pd.to_numeric(df_stock['Close'], errors='coerce')
+            df_stock['Volume'] = pd.to_numeric(df_stock['Volume'], errors='coerce')
+            df_stock['Open'] = pd.to_numeric(df_stock['Open'], errors='coerce')
+            df_stock['High'] = pd.to_numeric(df_stock['High'], errors='coerce')
+            df_stock['Low'] = pd.to_numeric(df_stock['Low'], errors='coerce')
 
-        # RSI、移動平均をdf_stock_recentにも反映
-        df_stock_recent['RSI'] = df_stock['RSI']
-        df_stock_recent['MovingAverage50'] = df_stock['MovingAverage50']
-        df_stock_recent['MovingAverage200'] = df_stock['MovingAverage200']
+            df_nikkei['Close'] = pd.to_numeric(df_nikkei['Close'], errors='coerce')
+            df_nikkei['Open'] = pd.to_numeric(df_nikkei['Open'], errors='coerce')
+            df_nikkei['High'] = pd.to_numeric(df_nikkei['High'], errors='coerce')
+            df_nikkei['Low'] = pd.to_numeric(df_nikkei['Low'], errors='coerce')
+            df_nikkei['Volume'] = pd.to_numeric(df_nikkei['Volume'], errors='coerce')
 
-        aggregated_features.update({
-            "RSI": df_stock_recent["RSI"].dropna().iloc[-1] if not df_stock_recent["RSI"].dropna().empty else 0,
-            "MovingAverage50": df_stock_recent["MovingAverage50"].dropna().iloc[-1] if not df_stock_recent["MovingAverage50"].dropna().empty else 0,
-            "MovingAverage200": df_stock_recent["MovingAverage200"].dropna().iloc[-1] if not df_stock_recent["MovingAverage200"].dropna().empty else 0,
-        })
+            df_mothers['Close'] = pd.to_numeric(df_mothers['Close'], errors='coerce')
+            df_mothers['Open'] = pd.to_numeric(df_mothers['Open'], errors='coerce')
+            df_mothers['High'] = pd.to_numeric(df_mothers['High'], errors='coerce')
+            df_mothers['Low'] = pd.to_numeric(df_mothers['Low'], errors='coerce')
+            df_mothers['Volume'] = pd.to_numeric(df_mothers['Volume'], errors='coerce')
 
-        # --- 📌 ボラティリティ指標（修正版）---
-        df_stock['High-Low'] = df_stock['High'] - df_stock['Low']
-        df_stock['High-ClosePrev'] = abs(df_stock['High'] - df_stock['Close'].shift(1))
-        df_stock['Low-ClosePrev'] = abs(df_stock['Low'] - df_stock['Close'].shift(1))
+            df_stock_targets['Open'] = pd.to_numeric(df_stock_targets['Open'], errors='coerce')
+            df_stock_targets['Close'] = pd.to_numeric(df_stock_targets['Close'], errors='coerce')
 
-        # True Range（TR）の正しい計算
-        df_stock['TR'] = df_stock[['High-Low', 'High-ClosePrev', 'Low-ClosePrev']].max(axis=1)
+            # 変化率（パーセンテージ）
+            df_stock['CloseChange'] = df_stock['Close'].pct_change() * 100  
+            df_nikkei['CloseChange'] = df_nikkei['Close'].pct_change() * 100  
+            df_mothers['CloseChange'] = df_mothers['Close'].pct_change() * 100
+            df_stock_targets['CloseChange'] = df_stock_targets['Close'].pct_change() * 100
 
-        # ATR（14日間の移動平均）
-        df_stock['ATR'] = df_stock['TR'].rolling(window=14, min_periods=1).mean()
+            # 開示日
+            disclosure_date = pd.to_datetime(item["DateKey"])
 
-        # df_stock_recentにATRを反映
-        df_stock_recent['ATR'] = df_stock['ATR']
+            # 開示日の±200日間のデータを抽出(過去のやつだから)
+            df_stock['DaysSinceDisclosure'] = (pd.to_datetime(df_stock["Date"]) - disclosure_date).dt.days
+            df_stock_recent = df_stock[(df_stock['DaysSinceDisclosure'] >= -200) & (df_stock['DaysSinceDisclosure'] <= 200)]
 
-        # ATRの平均を特徴量として集約
-        aggregated_features["ATR"] = df_stock_recent["ATR"].dropna().mean() if not df_stock_recent["ATR"].dropna().empty else 0
+            df_nikkei['DaysSinceDisclosure'] = (pd.to_datetime(df_nikkei["Date"]) - disclosure_date).dt.days
+            df_nikkei_recent = df_nikkei[df_nikkei['DaysSinceDisclosure'].isin(df_stock_recent['DaysSinceDisclosure'])]
 
-        # --- 📌 テクニカル指標 ---
-        df_stock = calculate_macd(df_stock)  # MACD
-        df_stock = calculate_bollinger_bands(df_stock)  # ボリンジャーバンド
-        df_stock = calculate_percent_r(df_stock)  # パーセントレンジ
-        df_stock = calculate_adx(df_stock)  # ADX
+            df_mothers['DaysSinceDisclosure'] = (pd.to_datetime(df_mothers["Date"]) - disclosure_date).dt.days
+            df_mothers_recent = df_mothers[df_mothers['DaysSinceDisclosure'].isin(df_stock_recent['DaysSinceDisclosure'])]
 
-        # 追加した指標を集計
-        aggregated_features.update({
-            "MACD": df_stock['MACD'].dropna().iloc[-1] if not df_stock['MACD'].dropna().empty else 0,
-            "Signal": df_stock['Signal'].dropna().iloc[-1] if not df_stock['Signal'].dropna().empty else 0,
-            "UpperBand": df_stock['UpperBand'].dropna().iloc[-1] if not df_stock['UpperBand'].dropna().empty else 0,
-            "LowerBand": df_stock['LowerBand'].dropna().iloc[-1] if not df_stock['LowerBand'].dropna().empty else 0,
-            "PercentR": df_stock['PercentR'].dropna().iloc[-1] if not df_stock['PercentR'].dropna().empty else 0,
-            "ADX": df_stock['ADX'].dropna().iloc[-1] if not df_stock['ADX'].dropna().empty else 0,
-        })
-        
-        # None、NaNは0に
-        aggregated_features = {
-            key : 0 if value is None or pd.isna(value) else value
-            for key, value in aggregated_features.items()
-        }
+            # --- 📌 株価 vs 指数の相関関係 ---
+            NikkeiCorr = None
+            if not df_stock_recent.empty and not df_nikkei_recent.empty:
+                NikkeiCorr = df_stock_recent["CloseChange"].corr(df_nikkei_recent["CloseChange"])
+                
+            aggregated_features["NikkeiCorr"] = 0 if NikkeiCorr is None or pd.isna(NikkeiCorr) else NikkeiCorr 
+            
+            MothersCorr = None
+            if not df_stock_recent.empty and not df_mothers_recent.empty:
+                MothersCorr = df_stock_recent["CloseChange"].corr(df_mothers_recent["CloseChange"])
+                
+            aggregated_features["MothersCorr"] = 0 if MothersCorr is None or pd.isna(MothersCorr) else MothersCorr 
 
-        # 特徴量リストに追加
-        features.append(aggregated_features)
-        
-        # 開示日から各ターゲットの日数後の変動率を計算(求める結果)
-        days_list = [0, 3, 7, 14, 21, 28, 35, 42, 49]
-        targets.append(get_last_valid_change_rate(df_stock_targets, days_list))
-        
-        # 開示をセット
-        documents.append(item["Link"])
-        
-        if not_next:    # デバッグではとらない
-            debug_rates = get_last_valid_change_rate(df_stock_targets, days_list, True)
-            # デバッグ用にセット
-            debug_data.append({
-                'Code': item['Code'],
-                **aggregated_features,
-                **debug_rates
+            # --- 📌 テクニカル指標 ---
+            df_stock['RSI'] = calculate_rsi(df_stock['Close'])  # RSI（相対力指数）
+            df_stock['MovingAverage50'] = df_stock['Close'].rolling(window=50, min_periods=1).mean()  # 50日移動平均線
+            df_stock['MovingAverage200'] = df_stock['Close'].rolling(window=200, min_periods=1).mean()  # 200日移動平均線
+
+            # RSI、移動平均をdf_stock_recentにも反映
+            df_stock_recent['RSI'] = df_stock['RSI']
+            df_stock_recent['MovingAverage50'] = df_stock['MovingAverage50']
+            df_stock_recent['MovingAverage200'] = df_stock['MovingAverage200']
+
+            aggregated_features.update({
+                "RSI": df_stock_recent["RSI"].dropna().iloc[-1] if not df_stock_recent["RSI"].dropna().empty else 0,
+                "MovingAverage50": df_stock_recent["MovingAverage50"].dropna().iloc[-1] if not df_stock_recent["MovingAverage50"].dropna().empty else 0,
+                "MovingAverage200": df_stock_recent["MovingAverage200"].dropna().iloc[-1] if not df_stock_recent["MovingAverage200"].dropna().empty else 0,
+            })
+
+            # --- 📌 ボラティリティ指標（修正版）---
+            df_stock['High-Low'] = df_stock['High'] - df_stock['Low']
+            df_stock['High-ClosePrev'] = abs(df_stock['High'] - df_stock['Close'].shift(1))
+            df_stock['Low-ClosePrev'] = abs(df_stock['Low'] - df_stock['Close'].shift(1))
+
+            # True Range（TR）の正しい計算
+            df_stock['TR'] = df_stock[['High-Low', 'High-ClosePrev', 'Low-ClosePrev']].max(axis=1)
+
+            # ATR（14日間の移動平均）
+            df_stock['ATR'] = df_stock['TR'].rolling(window=14, min_periods=1).mean()
+
+            # df_stock_recentにATRを反映
+            df_stock_recent['ATR'] = df_stock['ATR']
+
+            # ATRの平均を特徴量として集約
+            aggregated_features["ATR"] = df_stock_recent["ATR"].dropna().mean() if not df_stock_recent["ATR"].dropna().empty else 0
+
+            # --- 📌 テクニカル指標 ---
+            df_stock = calculate_macd(df_stock)  # MACD
+            df_stock = calculate_bollinger_bands(df_stock)  # ボリンジャーバンド
+            df_stock = calculate_percent_r(df_stock)  # パーセントレンジ
+            df_stock = calculate_adx(df_stock)  # ADX
+
+            # 追加した指標を集計
+            aggregated_features.update({
+                "MACD": df_stock['MACD'].dropna().iloc[-1] if not df_stock['MACD'].dropna().empty else 0,
+                "Signal": df_stock['Signal'].dropna().iloc[-1] if not df_stock['Signal'].dropna().empty else 0,
+                "UpperBand": df_stock['UpperBand'].dropna().iloc[-1] if not df_stock['UpperBand'].dropna().empty else 0,
+                "LowerBand": df_stock['LowerBand'].dropna().iloc[-1] if not df_stock['LowerBand'].dropna().empty else 0,
+                "PercentR": df_stock['PercentR'].dropna().iloc[-1] if not df_stock['PercentR'].dropna().empty else 0,
+                "ADX": df_stock['ADX'].dropna().iloc[-1] if not df_stock['ADX'].dropna().empty else 0,
             })
             
-    # 1. 開示文章（Link）のテキスト特徴量化
-    # out_doc_path = os.path.join(os.path.dirname(__file__), '../data/documents.csv')
-    # out_doc_df = pd.DataFrame(documents)
-    # out_doc_df.to_csv(out_doc_path, index=False)
+            # None、NaNは0に
+            aggregated_features = {
+                key : 0 if value is None or pd.isna(value) else value
+                for key, value in aggregated_features.items()
+            }
+
+            # 特徴量リストに追加
+            features.append(aggregated_features)
+            
+            # 開示をセット
+            documents.append(item["Link"])
+            
+            if not_next:    # デバッグではとらない
+                debug_rates = get_last_valid_change_rate(df_stock_targets, days_list, True)
+                # デバッグ用にセット
+                debug_data.append({
+                    'Code': item['Code'],
+                    **aggregated_features,
+                    **debug_rates
+                })
+        
+        document_summaries = summarize.summarize_in_parallel(documents)
     
-    document_summaries = summarize.summarize_in_parallel(documents)
-    if not_next:
-        summaries_df = pd.DataFrame(document_summaries)
-        summaries_path = os.path.join(os.path.dirname(__file__), '../data/summaries.csv')
-        summaries_df.to_csv(summaries_path, index=False)
+    print(f'総件数：{total_count} features件数：{len(features)} targets件数：{len(targets)} documents件数：{len(document_summaries)}')
     
-    print(f'総件数：{total_count} features件数：{len(features)} targets件数：{len(targets)} documents件数：{len(documents)}')
+    if len(targets) < 1:
+        # 対象がない
+        print('対象データなし：終了')
+        return
+    
+    if not_next:    # デバッグではとらない
+        # デバッグ用にデータを落とす
+        work_df = pd.DataFrame({
+            'features': features,
+            'targets': targets,
+            'document_summaries': document_summaries
+        })
     
     # if not_next:    # デバッグではとらない
     #     # 指標の中身をデバッグファイルとして落として確認
@@ -489,10 +491,10 @@ def calculate_change_rate(
     else:
         return 
   
-# 開示文章とその要約を取得  
+# 開示文章とその要約を取得  デバッグ確認用
 async def get_summarize_list(
     target_date,
-    is_financial_only
+    mode
 ):
     # 保存データを取得
     list_key = f'{gcs_list_csv_path}/{target_date}.json'
@@ -506,21 +508,22 @@ async def get_summarize_list(
     
     # 決算とその他で切り替える
     finance_Words = ['決算']
-    if is_financial_only:
-        # 決算のみ
-        data_df = data_df[data_df['Title'].str.contains('|'.join(finance_Words), na=False)]
-    else:
-        # 決算以外
-        data_df = data_df[~data_df['Title'].str.contains('|'.join(finance_Words), na=False)]
+    match mode:
+        case 1:
+            # 決算のみ
+            data_df = data_df[data_df['Title'].str.contains('|'.join(finance_Words), na=False)]
+        case 2:
+            # 決算以外
+            data_df = data_df[~data_df['Title'].str.contains('|'.join(finance_Words), na=False)]
     
     data_df = data_df[['Link']]
     
     data_df = data_df[~data_df['Link'].apply(is_broken_text)]
-    #data_df = data_df[14:15]
+    #data_df = data_df[0:1]
     
     links = data_df['Link'].tolist()
     
-    data_df['Summarize'] = summarize.summarize_in_parallel(links)
+    data_df['Summarize'] = summarize_work.summarize_in_parallel(links)
     
     return data_df.to_dict(orient="records")
 

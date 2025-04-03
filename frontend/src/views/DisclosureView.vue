@@ -22,6 +22,8 @@ const inago_list = ref([])
 // 土日の場合は直近金曜日
 const getAdjustedDate = () => {
   const today = new Date()
+  today.setHours(9, 0, 0, 0) // UTCの日付ズレ対策
+
   let day = today.getDay() // 0:日曜, 1:月曜, ..., 5:金曜, 6:土曜
 
   if (day === 0) {
@@ -31,8 +33,12 @@ const getAdjustedDate = () => {
     // 土曜なら1日前の金曜に
     today.setDate(today.getDate() - 1)
   }
+  // 年・月・日をゼロ埋めしてフォーマット
+  const yyyy = today.getFullYear()
+  const mm = String(today.getMonth() + 1).padStart(2, '0') // 1桁の月をゼロ埋め
+  const dd = String(today.getDate()).padStart(2, '0') // 1桁の日をゼロ埋め
 
-  return today.toISOString().split('T')[0]
+  return `${yyyy}-${mm}-${dd}`
 }
 
 const selectedDate = ref(getAdjustedDate())

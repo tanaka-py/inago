@@ -83,16 +83,21 @@ async def upload_disclosure(item: LearningItem):
 @router.post('/learning')
 async def learning_disclosure(item: LearningItem):
     
-    # 現在学習中の日付を取得
     target_date = ''
-    target_file_path = os.path.join(os.path.dirname(__file__), '../data/next_learndate.txt')
-    if os.path.exists(target_file_path):
-        with open(target_file_path, 'r', encoding='utf-8') as f:
-            target_date = f.read().strip()
+    if item.work_load:
+        # 作業データから読み込み
+        target_date = item.date
+    else:
+        # 現在学習中の日付を取得
+        
+        target_file_path = os.path.join(os.path.dirname(__file__), '../data/next_learndate.txt')
+        if os.path.exists(target_file_path):
+            with open(target_file_path, 'r', encoding='utf-8') as f:
+                target_date = f.read().strip()
             
     
     # 日付ファイル毎に
-    learning.learning_from_save_data(target_date)
+    learning.learning_from_save_data(target_date, work_load=item.work_load)
     
     return {
         'message': item.date
@@ -102,7 +107,7 @@ async def learning_disclosure(item: LearningItem):
 # LearningItem.is_finance_onlyで管理
 @router.post('/summarizelist')
 async def confirm_summarize_financial(item: LearningItem):
-    return await learning.get_summarize_list(item.date, is_financial_only=item.is_finance_only)
+    return await learning.get_summarize_list(item.date, mode=item.mode)
     
     
 @router.get('/dummylist/{select_date}')

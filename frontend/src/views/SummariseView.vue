@@ -7,6 +7,7 @@ const loadingStore = useLoadingStore()
 
 const summarize_list = ref([])
 const selected_date = ref('2022-11-28')
+//const selected_date = ref('2025-04-02')
 
 const firstArg = ref('')
 const secondArg = ref('')
@@ -14,7 +15,7 @@ const comparisonModal = ref(null)
 const showModal = ref(false)
 
 // 対象日の要約リストを取得
-const getSummarizeList = async (is_finance_only) => {
+const getSummarizeList = async (mode) => {
   if (!selected_date.value) {
     alert('日付いれいや')
     return
@@ -25,7 +26,7 @@ const getSummarizeList = async (is_finance_only) => {
   try {
     let params = {
       date: selected_date.value,
-      is_finance_only: is_finance_only
+      mode: mode,
     }
 
     let summarize_res = await axios.post('/disclosure/summarizelist', params)
@@ -75,10 +76,13 @@ const closeModal = () => {
     <!-- ボタン -->
     <div class="row mt-3">
       <div class="col d-flex justify-content-between">
-        <button class="btn btn-danger" @click="getSummarizeList(is_finance_only=true)">決算取得表示</button>
+        <button class="btn btn-primary" @click="getSummarizeList((mode = 0))">全件表示</button>
       </div>
       <div class="col d-flex justify-content-between">
-        <button class="btn btn-info" @click="getSummarizeList(is_finance_only=false)">決算なし取得表示</button>
+        <button class="btn btn-danger" @click="getSummarizeList((mode = 1))">決算のみ表示</button>
+      </div>
+      <div class="col d-flex justify-content-between">
+        <button class="btn btn-info" @click="getSummarizeList((mode = 2))">決算外取得表示</button>
       </div>
     </div>
 
@@ -123,13 +127,13 @@ const closeModal = () => {
           </div>
           <div class="modal-body">
             <div class="row">
-              <div class="col">
+              <div class="col-6">
                 <p><strong>引数1:</strong></p>
-                <p>{{ firstArg }}</p>
+                <p class="text-wrap">{{ firstArg }}</p>
               </div>
-              <div class="col">
+              <div class="col-6">
                 <p><strong>引数2:</strong></p>
-                <p>{{ secondArg }}</p>
+                <p class="text-wrap">{{ secondArg }}</p>
               </div>
             </div>
           </div>

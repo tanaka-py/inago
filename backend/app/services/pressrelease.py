@@ -13,7 +13,7 @@ pressrelease_api = os.getenv('PRESSRELEASE_API', '')
 # 処理対象ページを取得
 scraping_max_page = int(os.getenv('SCRAPING_MAX_PAGE', 1))
 # 収集データを保存して次のページへ行くかどうか
-not_next = os.getenv('NOT_NEXT', 'False').lower() == 'true'
+is_debug = os.getenv('is_debug', 'False').lower() == 'true'
 
 # プレスリリースの一覧を取得して返却
 async def get_pressrelease(select_date):

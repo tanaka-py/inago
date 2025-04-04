@@ -10,7 +10,7 @@ router = APIRouter()
 # 環境変数から会社リストの保存GCSパスを取得
 gcs_list_csv_path = os.getenv('GCS_LIST_CSV_PATH', '')
 # 収集データを保存して次のページへ行くかどうか
-not_next = os.getenv('NOT_NEXT', 'False').lower() == 'true'
+is_debug = os.getenv('is_debug', 'False').lower() == 'true'
 
 
 # tdnetの開示を取得(＊料金が高すぎるのでTdnetサイトのスクレイピングで)
@@ -31,7 +31,7 @@ async def get_tdnetlist(select_date):
             'datalist': []
         }
         
-    if not not_next:
+    if not is_debug:
         # consleに開示をアップロードする
         await learning.upload_disclosure_from_list(
             df[['Time','Date','Code', 'Name', 'Title', 'Link']],
@@ -67,7 +67,7 @@ async def upload_disclosure(item: LearningItem):
             'message': '開示が取得できなかったため終了'
             }
     
-    if not not_next:
+    if not is_debug:
         # consleに開示をアップロードする
         await learning.upload_disclosure_from_list(df)
             
@@ -97,7 +97,7 @@ async def learning_disclosure(item: LearningItem):
             
     
     # 日付ファイル毎に
-    learning.learning_from_save_data(target_date, work_load=item.work_load)
+    await learning.learning_from_save_data(target_date, work_load=item.work_load)
     
     return {
         'message': item.date

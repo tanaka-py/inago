@@ -15,8 +15,9 @@ warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
 
 # 環境変数から会社リストの保存GCSパスを取得
 gcs_list_csv_path = os.getenv('GCS_LIST_CSV_PATH', '')
+gcs_work_csv_path = os.getenv('GCS_WORK_CSV_PATH', '')
 
-not_next = os.getenv('NOT_NEXT', 'False').lower() == 'true'
+is_debug = os.getenv('is_debug', 'False').lower() == 'true'
 
 # 対象外開示リスト
 exclude_title_path = os.path.join(os.path.dirname(__file__), '../data/exclude_title.csv')
@@ -36,9 +37,21 @@ async def learning_from_save_data(
     document_summaries = []
     debug_data = []
         
+    total_count = 0
+    
     if work_load:
         # 作業データ読み込み
-        test = ''
+        list_key = f'{gcs_work_csv_path}/{target_date}.json'
+        data_list = googleapi.download_list(list_key)
+        
+        load_df = pd.DataFrame(data_list)
+        
+        features = load_df['features']
+        targets = load_df['targets']
+        document_summaries = load_df['document_summaries']
+        
+        total_count = len(features)
+        
     else:
         
         # 保存データを取得
@@ -46,15 +59,13 @@ async def learning_from_save_data(
         data_list = googleapi.download_list(list_key)
         
         # 株価が入ってないものがあれば保存しなおし
-        if not not_next:    # デバッグではとらない
+        if not is_debug:    # デバッグではとらない
             data_list = re_get_stock_data(
                 data_list,
                 target_date
             )
 
         # 2. 株価データの特徴量作成
-        total_count = 0
-        
         print(f'総件数：{len(data_list)}')
         
         for item in data_list:
@@ -64,7 +75,7 @@ async def learning_from_save_data(
                 print(f'開示文章が文字化けしてるためスルー：{item['Code']}')
                 continue
             
-            # if not_next:    # デバッグでは先頭のみ
+            # if is_debug:    # デバッグでは先頭のみ
             #     if 2 <= total_count:
             #         break
             
@@ -244,7 +255,7 @@ async def learning_from_save_data(
             # 開示をセット
             documents.append(item["Link"])
             
-            if not_next:    # デバッグではとらない
+            if is_debug:    # デバッグではとらない
                 debug_rates = get_last_valid_change_rate(df_stock_targets, days_list, True)
                 # デバッグ用にセット
                 debug_data.append({
@@ -262,15 +273,21 @@ async def learning_from_save_data(
         print('対象データなし：終了')
         return
     
-    if not_next:    # デバッグではとらない
+    if is_debug and not work_load:    # デバッグ時のみ
         # デバッグ用にデータを落とす
         work_df = pd.DataFrame({
             'features': features,
             'targets': targets,
             'document_summaries': document_summaries
         })
+        
+        # consleに開示をアップロードする
+        googleapi.rewrite_list(
+                work_df,
+                f'{gcs_work_csv_path}/{target_date}.json'
+            )
     
-    # if not_next:    # デバッグではとらない
+    # if is_debug:    # デバッグではとらない
     #     # 指標の中身をデバッグファイルとして落として確認
     #     debug_save = pd.DataFrame(debug_data)
     #     save_path = os.path.join(os.path.dirname(__file__), '../data/debug.csv')
@@ -278,9 +295,11 @@ async def learning_from_save_data(
     #     debug_save.to_csv(save_path, index=False)
         
     # LSTM学習
-    if not not_next:    # デバッグではとらない
-        print(f'{target_date}を学習')
-        #lstm.lstm_learning(X_text, features, targets)
+    if not is_debug:    # デバッグではとらない
+        # print(f'{target_date}を学習')
+        # print(features[0])
+        # print(targets[0])
+        lstm.lstm_learning(document_summaries, features, targets)
     
     # 開示一つずつ
     test = ''

@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from . import googleapi
+from . import googleapi, summarize
 
 # データ読み込み (例としてjson読み込みの方法)
 import json
@@ -20,43 +20,43 @@ gcs_model_torch_path = os.getenv('GCS_MODEL_TORCH_PATH', '')
 # 呼び出し元より
 # documents: 開示リスト(この中で特徴量に変える)
 # features：開示から3か月の各指標特徴量
-#           CloseMean            5.045185e+02
-#           CloseMax             5.910000e+02
-#           CloseMin             4.380000e+02
-#           CloseChangeMean      4.504040e-01
-#           VolumeSum            1.870440e+07
-#           NikkeiCorr          -2.374399e-02
-#           MothersCorr         -2.298719e-02
-#           RSI                  7.532468e+01
-#           MovingAverage50      5.079400e+02
-#           MovingAverage200     5.045185e+02
-#           ATR                  5.049792e+02
-#           GapMean              1.509434e-01
-#           CandleSizeMean       1.851852e+00
-#           High-LowRangeMean    2.188889e+01
-#           MACD                 1.320503e+01
-#           Signal               1.262155e+01
-#           UpperBand            5.881654e+02
-#           LowerBand            5.121346e+02
-#           PercentR             1.206897e+01
-#           ADX                  2.386351e+01
+#           'EPS'
+#           'ROE'
+#           'PER'
+#           'PBR'
+#           'Market Capitalization Log'
+#           'NikkeiCorr'
+#           'MothersCorr'
+#           'RSI'
+#           'MovingAverage50'
+#           'MovingAverage200'
+#           'ATR'
+#           'MACD'
+#           'Signal'
+#           'UpperBand'
+#           'LowerBand'
+#           'PercentR'
+#           'ADX'
 # targets：３日後～７週間の変化率(予測)
-#           ChangeRate_0      0.000000
-#           ChangeRate_3     -0.865801
-#           ChangeRate_7      1.515152
-#           ChangeRate_14    -2.597403
-#           ChangeRate_21    -3.030303
-#           ChangeRate_28     5.627706
-#           ChangeRate_35    26.623377
-#           ChangeRate_42    17.748918
-#           ChangeRate_49    16.233766
+#           ChangeRate_0
+#           ChangeRate_3
+#           ChangeRate_7
+#           ChangeRate_14
+#           ChangeRate_21
+#           ChangeRate_28
+#           ChangeRate_35
+#           ChangeRate_42
+#           ChangeRate_49
 # このLISTでくるように
 # PyTorchにはこの順番で学習させるため
 def lstm_learning(
-    x_text,
+    documents,
     features,
     targets
     ):
+    
+    # 文章を特徴量に変換
+    x_text = [summarize.get_text_embeddings(document) for document in documents]
     
     # データセットとデータローダの作成
     dataset = CustomDataset(x_text, features, targets)
@@ -106,10 +106,22 @@ def lstm_learning(
 
 # PyTorch用のデータセットクラス
 class CustomDataset(torch.utils.data.Dataset):
+    
+    FEATURE_KEYS = [
+        'EPS', 'ROE', 'PER', 'PBR', 'Market Capitalization Log', 'NikkeiCorr', 'MothersCorr',
+        'RSI', 'MovingAverage50', 'MovingAverage200', 'ATR', 'MACD', 'Signal',
+        'UpperBand', 'LowerBand', 'PercentR', 'ADX'
+    ]
+    
+    TARGET_KEYS = [
+        'ChangeRate_0', 'ChangeRate_3', 'ChangeRate_7', 'ChangeRate_14', 'ChangeRate_21',
+        'ChangeRate_28', 'ChangeRate_35', 'ChangeRate_42', 'ChangeRate_49'
+    ]
+    
     def __init__(self, x_text_tfidf, features, targets):
         self.x_text_tfidf = torch.tensor(x_text_tfidf, dtype=torch.float32)
-        self.features = [torch.tensor(list(target.values()), dtype=torch.float32) for target in features]
-        self.targets = [torch.tensor(list(target.values()), dtype=torch.float32) for target in targets]
+        self.features = [torch.tensor([target[key] for key in self.FEATURE_KEYS], dtype=torch.float32) for target in features]
+        self.targets = [torch.tensor([target[key] for key in self.TARGET_KEYS], dtype=torch.float32) for target in targets]
 
     def __len__(self):
         return len(self.targets)

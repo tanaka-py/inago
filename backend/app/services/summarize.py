@@ -147,6 +147,44 @@ def get_sentence_embeddings(sentences, model, tokenizer, device, max_token_lengt
     # すべてのバッチの結果を結合
     return np.concatenate(embeddings, axis=0)  # 直接2D numpy配列を返す
 
+# 特徴量を取得(model学習用)
+def get_text_embeddings(text, max_token_length=512, batch_size=32):
+    # トークン化
+    tokens = tokenizer.encode(text, add_special_tokens=True)  # 文全体をトークン化
+
+    # トークン数が512を超えていた場合、512トークンずつ分割する
+    if len(tokens) > max_token_length:
+        chunk_size = max_token_length
+        chunks = [tokens[i:i + chunk_size] for i in range(0, len(tokens), chunk_size)]
+    else:
+        chunks = [tokens]  # トークン数が512以内ならそのまま
+
+    embeddings = []
+
+    # 各チャンクをバッチ処理
+    for chunk in chunks:
+        # トークンをデコードして文字列に戻す
+        chunk_text = tokenizer.decode(chunk, skip_special_tokens=True)
+
+        # 再度文字列に変換してからトークナイズ
+        inputs = tokenizer(chunk_text, return_tensors="pt", truncation=True, padding="longest", max_length=max_token_length)
+
+        # デバイスに転送
+        inputs = {key: value.to(device) for key, value in inputs.items()}
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # mean poolingで特徴量を取得
+        chunk_embedding = outputs.last_hidden_state.mean(dim=1).cpu().numpy()  # バッチごとに取得
+        embeddings.append(chunk_embedding)
+
+    # 全チャンクの埋め込みを平均化（または統合）
+    final_embedding = np.mean(np.concatenate(embeddings, axis=0), axis=0)  # 例えば平均化
+
+    return final_embedding
+
+
 # janomeを使用して文をある程度に分割
 def split_sentences_with_janome(text):
     tokenizer = Tokenizer()

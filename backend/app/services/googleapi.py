@@ -6,6 +6,11 @@ import pandas as pd
 from io import BytesIO
 import joblib
 import torch
+from ..models import mlp
+import torch.serialization
+
+# MLPModel を安全なグローバルとして追加
+torch.serialization.add_safe_globals([mlp.MLPModel])
 
 # 環境変数から認証情報を取得
 google_creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
@@ -109,8 +114,10 @@ def upload_model_torch(
     blob_name
 ):
     
-    # モデルをバイトストリームに保存
-    model_bytes = torch.save(model.state_dict(), BytesIO())
+    # modelをバイトストリームに保存
+    model_bytes = BytesIO()
+    torch.save(model, model_bytes)
+    model_bytes.seek(0)
     
     # Google Cloud Storage クライアントを作成
     storage_client = storage.Client.from_service_account_json(google_creds_path)
@@ -119,7 +126,7 @@ def upload_model_torch(
     bucket = storage_client.get_bucket(bucket_name)
     
     # Blob検索
-    blob = bucket.get_blob(blob_name)
+    blob = bucket.blob(blob_name)
     
     blob.upload_from_file(model_bytes, content_type='application/octet-stream', timeout=300)
     
@@ -140,4 +147,4 @@ def load_model_torch(
     model_bytes = blob.download_as_bytes()
     
     # メモリ内でモデルを復元
-    return torch.load(BytesIO(model_bytes))
+    return torch.load(BytesIO(model_bytes), weights_only=False)

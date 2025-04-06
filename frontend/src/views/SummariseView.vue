@@ -6,8 +6,8 @@ const axios = inject('axios')
 const loadingStore = useLoadingStore()
 
 const summarize_list = ref([])
-const selected_date = ref('2022-11-28')
-//const selected_date = ref('2025-04-02')
+//const selected_date = ref('2022-11-28')
+const selected_date = ref('2025-03-28')
 
 const firstArg = ref('')
 const secondArg = ref('')

@@ -10,7 +10,7 @@ from transformers import BertJapaneseTokenizer, BertModel
 from janome.tokenizer import Tokenizer
 from bert_score import score
 from sklearn.metrics.pairwise import cosine_similarity
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import torch.nn.functional as F
 import networkx as nx
 from ..models import headerfooter_replace
@@ -65,18 +65,72 @@ def summarize_in_parallel(documents, max_workers=5):
     
     return results
 
+# 特徴量変換を同時起動
+def embed_in_parallel(documents, max_workers=3):
+    
+    result = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_documents = [executor.submit(get_text_embeddings, document) for document in documents]
+        
+        for future in future_documents:
+            try:
+                result.append(future.result())
+            except Exception as e:
+                result.append(f'error:{e}')
+    
+    return np.array(result)
+
+# ブラッシュアップ文章処理を並列化
+def brush_in_parallel(documents, max_workers=3):
+    result = []
+    
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_documents = [executor.submit(brushup_text, document) for document in documents]
+        
+        for future in future_documents:
+            try:
+                result.append(future.result())
+            except Exception as e:
+                print(f'error:{e}')
+    
+    return result
+
 # ヘッダー部分を削除
 def clean_header(text):
     
+    is_delete = False
+    pattern = '|'.join(pattern[0] for pattern in headerfooter_replace.PATTERNS_HEADER)
+    match = re.search(pattern, text)
+    if match and match.start() <= 300:
+        # マッチした部分までを削除
+        #text = re.sub(r'^.*?' + pattern, '', text, count=1)
+        text = re.sub(r'^.*?(' + pattern + ')', '', text, count=1)
+        is_delete = True
+        
     # 不要なブランクを削除
     text = re.sub(r'\s+', '', text).strip()
     
-    # 各パターンで処理
-    for pattern, label in headerfooter_replace.PATTERNS_HEADER:
-        match = re.search(pattern, text)
-        if match and match.start() <= 200:
-            # マッチした部分までを削除
-            text = re.sub(r'^.*?' + pattern, '', text, count=1)
+    if not is_delete:
+        # TELなしでも、3ブロック以上のやつだけ
+        pattern = r'''
+            (?<!\d)
+            (
+                0\d{1,4}
+                [-ー−–（）\s]*       # ← ここに en dash 入れたよ！！
+                \d{2,4}
+                [-ー−–（）\s]*
+                \d{3,4}
+            )
+            (?!\d)
+        '''
+
+        # matchオブジェクトが欲しいので finditer を使うお
+        for match in re.finditer(pattern, text, re.VERBOSE | re.IGNORECASE):
+            digits = re.sub(r'\D', '', match.group())
+            if len(digits) >= 10 and match.start() < 200:
+                # 有効な電話番号っぽい！そこまでズバーンと削除ｗｗｗ
+                text =  text[match.end():]
+                break
 
     return text
 
@@ -113,6 +167,9 @@ def clean_text(text):
     
     # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
     text = re.sub('|'.join(map(re.escape, replace_list)), '。', text)
+    
+    # 連続するハイフン（ーまたは-）を1つにする
+    text = re.sub(r'[ー\―\-]{2,}', '―', text)
 
     # 最終クリーン
     text = re.sub(r'。+', '。', text)
@@ -149,38 +206,44 @@ def get_sentence_embeddings(sentences, model, tokenizer, device, max_token_lengt
 
 # 特徴量を取得(model学習用)
 def get_text_embeddings(text, max_token_length=512, batch_size=32):
-    # トークン化
-    tokens = tokenizer.encode(text, add_special_tokens=True)  # 文全体をトークン化
-
-    # トークン数が512を超えていた場合、512トークンずつ分割する
+    # トークン化（特殊トークンを加える）
+    tokens = tokenizer.encode(text, add_special_tokens=True)
+    
+    # トークン化後のトークン数を確認
+    print(f"トークン数: {len(tokens)}")  # 実際のトークン数を確認
     if len(tokens) > max_token_length:
-        chunk_size = max_token_length
-        chunks = [tokens[i:i + chunk_size] for i in range(0, len(tokens), chunk_size)]
-    else:
-        chunks = [tokens]  # トークン数が512以内ならそのまま
+        print("警告: トークン数が最大長を超えています！")
+    
+    # トークン数が512を超えていた場合、512トークンずつ分割する
+    chunks = []
+    while len(tokens) > max_token_length:
+        chunk = tokens[:max_token_length]
+        chunks.append(chunk)
+        tokens = tokens[max_token_length:]  # 残りを次に
 
+    if len(tokens) > 0:
+        chunks.append(tokens)  # 残りを最後のチャンクとして追加
+
+    # チャンク数を確認
+    print(f"分割後のチャンク数: {len(chunks)}")
+    
     embeddings = []
 
     # 各チャンクをバッチ処理
     for chunk in chunks:
-        # トークンをデコードして文字列に戻す
-        chunk_text = tokenizer.decode(chunk, skip_special_tokens=True)
-
-        # 再度文字列に変換してからトークナイズ
-        inputs = tokenizer(chunk_text, return_tensors="pt", truncation=True, padding="longest", max_length=max_token_length)
-
-        # デバイスに転送
-        inputs = {key: value.to(device) for key, value in inputs.items()}
+        # 入力の準備（バッチ次元追加）
+        input_ids = torch.tensor(chunk).unsqueeze(0).to(device)  # バッチ次元追加
+        attention_mask = torch.ones(input_ids.shape, device=device)
 
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
 
-        # mean poolingで特徴量を取得
-        chunk_embedding = outputs.last_hidden_state.mean(dim=1).cpu().numpy()  # バッチごとに取得
+        # チャンクごとの埋め込みを計算
+        chunk_embedding = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
         embeddings.append(chunk_embedding)
 
-    # 全チャンクの埋め込みを平均化（または統合）
-    final_embedding = np.mean(np.concatenate(embeddings, axis=0), axis=0)  # 例えば平均化
+    # 全チャンクの埋め込みを平均化
+    final_embedding = np.mean(np.concatenate(embeddings, axis=0), axis=0)
 
     return final_embedding
 
@@ -293,3 +356,25 @@ def summarize_long_document(document, max_token_length=512, stride=256, summariz
     summary = ''.join(summary_sentences)
     
     return summary
+
+# 要約ではなく文章から無駄な箇所を省く
+def brushup_text(
+    document
+    ):
+    
+    # 文書をクリーンアップ
+    document = clean_text(document)
+    
+    # 文の分割
+    sentences = split_sentences_with_janome(document)
+    
+    if not sentences:
+        return ""
+    
+    # 低クオリティだけ省く
+    non_low_priority_sentences = [
+        sentence for sentence in sentences
+        if not any(keywords in sentence for keywords in low_priority_keywords)
+    ]
+        
+    return ''.join(non_low_priority_sentences)

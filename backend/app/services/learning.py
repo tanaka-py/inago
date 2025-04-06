@@ -3,7 +3,7 @@ import json
 import yfinance as yf
 from datetime import datetime, timedelta
 import pandas as pd
-from . import googleapi, disclosure, lstm, finance, summarize, summarize_work
+from . import googleapi, disclosure, finance, mlp, summarize, summarize_work
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import numpy as np
@@ -264,7 +264,8 @@ async def learning_from_save_data(
                     **debug_rates
                 })
         
-        document_summaries = summarize.summarize_in_parallel(documents)
+        # 要約ではなく、元の文章からいらんもんを省くスタイルで
+        document_summaries = [summarize.brushup_text(document) for document in documents]
     
     print(f'総件数：{total_count} features件数：{len(features)} targets件数：{len(targets)} documents件数：{len(document_summaries)}')
     
@@ -294,12 +295,13 @@ async def learning_from_save_data(
         
     #     debug_save.to_csv(save_path, index=False)
         
-    # LSTM学習
+    # MLP学習
     if not is_debug:    # デバッグではとらない
         # print(f'{target_date}を学習')
         # print(features[0])
         # print(targets[0])
-        lstm.lstm_learning(document_summaries, features, targets)
+        mlp.mlp_learning(document_summaries[0:1], features[0:1], targets[0:1])
+        #mlp.mlp_learning(document_summaries, features, targets)
     
     # 開示一つずつ
     test = ''
@@ -542,7 +544,9 @@ async def get_summarize_list(
     
     links = data_df['Link'].tolist()
     
-    data_df['Summarize'] = summarize_work.summarize_in_parallel(links)
+    #data_df['Summarize'] = summarize_work.summarize_in_parallel(links)
+    #data_df['Summarize'] = summarize.brush_in_parallel(links)
+    data_df['Summarize'] = [summarize.brushup_text(link) for link in links]
     
     return data_df.to_dict(orient="records")
 

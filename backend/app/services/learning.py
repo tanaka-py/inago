@@ -274,8 +274,14 @@ async def learning_from_save_data(
         print('対象データなし：終了')
         return
     
-    if is_debug and not work_load:    # デバッグ時のみ
-        # デバッグ用にデータを落とす
+    if work_load:
+        # work_load後は学習
+        # MLP学習
+        if not is_debug:    # デバッグではとらない
+            #mlp.mlp_learning(document_summaries[0:1], features[0:1], targets[0:1])
+            mlp.mlp_learning(document_summaries, features, targets)
+    else:
+        # ワークデータを落とす
         work_df = pd.DataFrame({
             'features': features,
             'targets': targets,
@@ -285,26 +291,10 @@ async def learning_from_save_data(
         # consleに開示をアップロードする
         googleapi.rewrite_list(
                 work_df,
-                f'{gcs_work_csv_path}/{target_date}.json'
+                f'{gcs_work_csv_path}/work_data.json'
             )
-    
-    # if is_debug:    # デバッグではとらない
-    #     # 指標の中身をデバッグファイルとして落として確認
-    #     debug_save = pd.DataFrame(debug_data)
-    #     save_path = os.path.join(os.path.dirname(__file__), '../data/debug.csv')
         
-    #     debug_save.to_csv(save_path, index=False)
-        
-    # MLP学習
-    if not is_debug:    # デバッグではとらない
-        # print(f'{target_date}を学習')
-        # print(features[0])
-        # print(targets[0])
-        mlp.mlp_learning(document_summaries[0:1], features[0:1], targets[0:1])
-        #mlp.mlp_learning(document_summaries, features, targets)
     
-    # 開示一つずつ
-    test = ''
     
 # 開示文章の文字化けチェック(文字化けしてる開示はスルー)
 def is_broken_text(text):

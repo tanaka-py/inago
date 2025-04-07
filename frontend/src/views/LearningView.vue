@@ -81,10 +81,10 @@ onMounted(() => {})
       <div class="col d-flex justify-content-between">
         <button class="btn btn-success" @click="callTdnetUpload">Tdnet開示データ収集</button>
         <button class="btn btn-secondary" @click="callLearning((work_load = false))">
-          開示学習
+          データ事前作成
         </button>
         <button class="btn btn-warning" @click="callLearning((work_load = true))">
-          開示学習(作業データ読込からデバッグ)
+          学習
         </button>
       </div>
     </div>

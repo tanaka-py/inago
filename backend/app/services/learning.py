@@ -366,48 +366,6 @@ def re_get_stock_data(
     
     modify_list = googleapi.download_list(key)
     
-    # if list_date > before_90_date:
-    #     # 対象日が３か月以内の場合は株価を埋めるために取り直し
-    #     df[['Stock', 'N225', 'Growth']] = df.apply(
-    #         lambda row: pd.Series(
-    #             disclosure.get_amonth_finance(row['Code'], pd.to_datetime(row['Date']))
-    #             ),
-    #         axis=1
-    #     )
-        
-    #     # 書き込み、読み込みし直し
-    #     key = f'{gcs_list_csv_path}/{target_date}.json'
-    #     googleapi.rewrite_list(
-    #         df,
-    #         key
-    #     )
-        
-    #     modify_list = googleapi.download_list(key)
-    # else:
-    #     # 90日より前のデータは埋まってないところだけ取り直し
-        
-    #     # 対象日の中に株価データが入ってないものを抽出
-    #     mask = df['Stock'].apply(lambda x: isinstance(x, dict) and len(x) == 0)
-        
-    #     if mask.any():
-    #         # 取得出来てないものがあれば取得して保存しなおし
-    #         df.loc[mask, ['Stock', 'N225', 'Growth']] = df.loc[mask].apply(
-    #             lambda row: pd.Series(
-    #                 disclosure.get_amonth_finance(row['Code'], pd.to_datetime(row['Date'])),
-    #                 index=['Stock', 'N225', 'Growth']
-    #                 ),
-    #             axis=1
-    #         )
-            
-    #         # 保存しなおし
-    #         key = f'{gcs_list_csv_path}/{target_date}.json'
-    #         googleapi.rewrite_list(
-    #             df,
-    #             key
-    #         )
-    #         # 取得しなおし
-    #         modify_list = googleapi.download_list(key)
-    
     return modify_list
 
 # RSI (Relative Strength Index) を計算

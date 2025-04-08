@@ -123,10 +123,13 @@ def targets_from_model(
     
     # 開示文章を特徴量に変換
     x_text = summarize.get_text_embeddings(document)
+    x_text_tensor = torch.tensor(x_text, dtype=torch.float32).unsqueeze(0)
     
     # 指標を特徴量に変換
     # unsqueeze(0)バッチサイズ1のテンソルに変換
     feature_tensor = torch.tensor(list(feature.values()), dtype=torch.float32).unsqueeze(0)
+    
+    print(f'開示の特徴量→{x_text_tensor.shape[1]}')
     
     # modelを評価モードに
     # これによって結果を得るようの動きになる
@@ -135,9 +138,12 @@ def targets_from_model(
     # 勾配計算は不要なので、no_gradで無効化
     with torch.no_grad():
         # 予測を取得
-        targets = model(x_text, feature_tensor)
+        targets = model(x_text_tensor, feature_tensor)
         
-    return targets
+    predictions = [t.item() for t in targets[0]]
+    predictions_dic = dict(zip(mlp.CustomDataset.TARGET_KEYS, predictions))
+        
+    return predictions_dic
     
     
 

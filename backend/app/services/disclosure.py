@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import asyncio
 from . import process_pdf, yahoofinance, jquants
-from datetime import datetime
+from datetime import datetime, timedelta
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
 from bs4 import BeautifulSoup
@@ -204,6 +204,29 @@ def extract_pdfurl(title) :
     company_name = re.sub(r':[^\s]+\.pdf', '', title)
     
     return url, company_name
+
+# 対象日の株価を取得
+def target_date_open_stock(
+    target_date,
+    code
+):
+    # 開始、終了日 同じ日にしておく
+    start_str_date = target_date.to_pydatetime().strftime('%Y-%m-%d')
+    end_str_date = (target_date + timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    stock = yf.Ticker(f'{code}.T')
+    df = stock.history(start=start_str_date, end=end_str_date)
+    comp = {}
+    if not df.empty:
+        df['Date'] = df.index.date.astype(str)  # 日付部分だけ取り出す
+        comp = df.to_json(orient='records', lines=False, force_ascii=False)
+    else:
+        print(f'{code}:最後のyahoo finance')
+        comp = yahoofinance.get_yahoofinance_stocllist(code, target_date)
+        if not comp:
+            print(f'{code}:どこにもない')
+            
+    return comp
 
 #　コードからその日から一か月の株価をjsonで返却
 def get_amonth_finance(

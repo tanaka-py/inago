@@ -83,18 +83,11 @@ async def upload_disclosure(item: LearningItem):
 @router.post('/learning')
 async def learning_disclosure(item: LearningItem):
     
-    target_date = ''
-    if item.work_load:
-        # 作業データから読み込み
-        target_date = item.date
-    else:
-        # 現在学習中の日付を取得
-        
-        target_file_path = os.path.join(os.path.dirname(__file__), '../data/next_learndate.txt')
-        if os.path.exists(target_file_path):
-            with open(target_file_path, 'r', encoding='utf-8') as f:
-                target_date = f.read().strip()
-            
+    # 現在学習中の日付を取得
+    target_file_path = os.path.join(os.path.dirname(__file__), '../data/next_learndate.txt')
+    if os.path.exists(target_file_path):
+        with open(target_file_path, 'r', encoding='utf-8') as f:
+            target_date = f.read().strip()      
     
     # 日付ファイル毎に
     await learning.learning_from_save_data(target_date, work_load=item.work_load)
@@ -103,11 +96,20 @@ async def learning_disclosure(item: LearningItem):
         'message': item.date
         }
 
-# 開示とその要約したリストを取得（決算or決算以外）
-# LearningItem.is_finance_onlyで管理
+# 開示とその要約したリストを取得
 @router.post('/summarizelist')
-async def confirm_summarize_financial(item: LearningItem):
-    return await learning.get_summarize_list(item.date, mode=item.mode)
+async def confirm_summarize():
+    return await learning.get_summarize_list()
+
+# 学習前データリストを取得
+@router.post('/workdatalist')
+async def confirm_work_data():
+    return await learning.get_work_data_list()
+
+# 予想株価リストを取得
+@router.post('/evallist')
+async def get_eval_list(item: LearningItem):
+    return await learning.eval_target_list(item.date)
     
     
 @router.get('/dummylist/{select_date}')

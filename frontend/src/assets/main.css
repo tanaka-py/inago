@@ -283,3 +283,46 @@ footer {
   white-space: normal;
   /* 改行を許可する */
 }
+
+/* デバッグページの-------------------------------------------------------*/
+.summarize-scroll-container {
+  max-height: 80vh;
+  /* 高さ制限つけて、スクロール出すお！ */
+  overflow-y: auto;
+  /* 縦スクロール発動！ */
+  display: flex;
+  flex-direction: column;
+  /* 縦に並べる！ */
+  padding-right: 8px;
+  /* スクロールバーと被らないように */
+}
+
+.summarize-scroll-container .summary-block {
+  width: 100%;
+  /* フル幅で見やすく！ */
+  box-sizing: border-box;
+}
+
+.features-grid,
+.targets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* 横並びに分散配置！ */
+  gap: 0.5rem;
+  /* ちょっと隙間つけて見やすく */
+  list-style: none;
+  /* デフォルトの点を消す */
+  padding: 0;
+  margin: 0;
+}
+
+.features-grid li,
+.targets-grid li {
+  background-color: #f9f9f9;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  border: 1px solid #ddd;
+}
+
+/* デバッグページの-------------------------------------------------------*/

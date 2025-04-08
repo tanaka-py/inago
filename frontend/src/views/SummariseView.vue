@@ -6,6 +6,7 @@ const axios = inject('axios')
 const loadingStore = useLoadingStore()
 
 const summarize_list = ref([])
+const workdata_list = ref([])
 //const selected_date = ref('2022-11-28')
 const selected_date = ref('2025-01-09')
 
@@ -15,25 +16,51 @@ const comparisonModal = ref(null)
 const showModal = ref(false)
 
 // 対象日の要約リストを取得
-const getSummarizeList = async (mode) => {
-  if (!selected_date.value) {
-    alert('日付いれいや')
-    return
-  }
+const getSummarizeList = async () => {
+  loadingStore.startLoading()
 
+  try {
+    let summarize_res = await axios.post('/disclosure/summarizelist')
+
+    summarize_list.value = summarize_res.data
+    workdata_list.value = []
+  } catch (error) {
+    alert(`call_error! ★summarize=[${error}]`)
+  } finally {
+    loadingStore.stopLoading()
+  }
+}
+
+// 株価予想一覧
+const getEvalDataList = async () => {
   loadingStore.startLoading()
 
   try {
     let params = {
       date: selected_date.value,
-      mode: mode,
     }
+    let work_data_res = await axios.post('/disclosure/evallist', params)
 
-    let summarize_res = await axios.post('/disclosure/summarizelist', params)
+    workdata_list.value = work_data_res.data
+    summarize_list.value = []
+  } catch (err) {
+    alert(`call_error! ★EvalData=[${err}]`)
+  } finally {
+    loadingStore.stopLoading()
+  }
+}
 
-    summarize_list.value = summarize_res.data
-  } catch (error) {
-    alert(`call_error! ★summarize=[${error}]`)
+// 学習前データ取得
+const getWorkDataList = async () => {
+  loadingStore.startLoading()
+
+  try {
+    let work_data_res = await axios.post('/disclosure/workdatalist')
+
+    workdata_list.value = work_data_res.data
+    summarize_list.value = []
+  } catch (err) {
+    alert(`call_error! ★WorkData=[${err}]`)
   } finally {
     loadingStore.stopLoading()
   }
@@ -76,17 +103,67 @@ const closeModal = () => {
     <!-- ボタン -->
     <div class="row mt-3">
       <div class="col d-flex justify-content-between">
-        <button class="btn btn-primary" @click="getSummarizeList((mode = 0))">全件表示</button>
+        <button class="btn btn-primary" @click="getWorkDataList">学習前データ確認</button>
       </div>
       <div class="col d-flex justify-content-between">
-        <button class="btn btn-danger" @click="getSummarizeList((mode = 1))">決算のみ表示</button>
+        <button class="btn btn-danger" @click="getEvalDataList">予想値確認</button>
       </div>
       <div class="col d-flex justify-content-between">
-        <button class="btn btn-info" @click="getSummarizeList((mode = 2))">決算外取得表示</button>
+        <button class="btn btn-info" @click="getSummarizeList">要約比較確認</button>
       </div>
     </div>
 
-    <!-- 一覧 -->
+    <!-- 学習関連一覧 -->
+    <div class="row" v-if="!loadingStore.isLoading && workdata_list.length">
+      <div
+        class="col table-scroll-wrapper"
+        style="max-height: calc(100vh - 100px); overflow-y: auto"
+      >
+        <div
+          v-for="(list_data, index) in workdata_list"
+          :key="index"
+          class="summary-block p-4 border mb-4 rounded bg-white shadow"
+        >
+          <!-- NoとDocument Summary（冒頭だけ） -->
+          <div class="font-bold mb-2">No. {{ index + 1 }}</div>
+          <div class="mb-4">
+            <strong>要約：</strong>
+            {{ list_data.document_summaries.slice(0, 30) }}...
+            <a
+              href="#"
+              @click.prevent="dispCompSummarize(list_data.Link, list_data.document_summaries)"
+              >続きを読む</a
+            >
+          </div>
+
+          <!-- Features -->
+          <div class="mb-4">
+            <strong>📊 特徴 (Features)</strong>
+            <ul class="targets-grid">
+              <li v-for="(val, key) in list_data.features" :key="key">
+                <strong>{{ key }}</strong
+                >: {{ val }}
+              </li>
+            </ul>
+          </div>
+
+          <!-- Targets -->
+          <div>
+            <strong>🎯 目標値 (Targets)</strong>
+            <ul class="targets-grid">
+              <li v-for="(val, key) in list_data.targets" :key="key">
+                {{ key }}:
+                <span :style="{ color: val > 0 ? 'red' : val < 0 ? 'blue' : 'inherit' }">{{
+                  val
+                }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 要約比較確認一覧 -->
     <div class="row" v-if="!loadingStore.isLoading && summarize_list.length">
       <div class="col table-scroll-wrapper">
         <table class="table table-scroll">

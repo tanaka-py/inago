@@ -100,32 +100,18 @@ def clean_header(text):
     
     is_delete = False
     pattern = '|'.join(pattern[0] for pattern in headerfooter_replace.PATTERNS_HEADER)
-    match = re.search(pattern, text)
+    # 「」が直後にない場合にだけマッチさせる正規表現
+    pattern_with_check = r'(' + pattern + r')(?!」)'  # マッチしたパターンの直後に「」がない場合にマッチ
+    match = re.search(pattern_with_check, text)
     if match and match.start() <= 300:
         # マッチした部分までを削除
         #text = re.sub(r'^.*?' + pattern, '', text, count=1)
-        text = re.sub(r'^.*?(' + pattern + ')', '', text, count=1)
+        text = re.sub(r'^.*?' + pattern_with_check, '', text, count=1)
         is_delete = True
-        
-    # 不要なブランクを削除
-    text = re.sub(r'\s+', '', text).strip()
     
     if not is_delete:
-        # TELなしでも、3ブロック以上のやつだけ
-        pattern = r'''
-            (?<!\d)
-            (
-                0\d{1,4}
-                [-ー−–（）\s]*       # ← ここに en dash 入れたよ！！
-                \d{2,4}
-                [-ー−–（）\s]*
-                \d{3,4}
-            )
-            (?!\d)
-        '''
-
         # matchオブジェクトが欲しいので finditer を使うお
-        for match in re.finditer(pattern, text, re.VERBOSE | re.IGNORECASE):
+        for match in re.finditer(headerfooter_replace.PHONE_PATTERN, text, re.VERBOSE | re.IGNORECASE):
             digits = re.sub(r'\D', '', match.group())
             if len(digits) >= 10 and match.start() < 200:
                 # 有効な電話番号っぽい！そこまでズバーンと削除ｗｗｗ
@@ -156,8 +142,27 @@ def clean_footer(text):
 
     return text
 
+# 年としてありえる連番がガチガチに詰まってるのを探す
+def insert_spaces_between_years(text):
+    
+    # 年としてありえる連番がガチガチに詰まってるのを探す（8個以上の4桁数字で構成されてるとか）
+    pattern = r'((?:19[8-9]\d|20[0-2]\d){3,})'  # 年が3個以上連続してる
+    matches = re.finditer(pattern, text)
+
+    for match in matches:
+        chunk = match.group(1)
+        years = [chunk[i:i+4] for i in range(0, len(chunk), 4)]
+        spaced = ' '.join(years)
+        text = text.replace(chunk, spaced)
+
+    return text
+
 # 開示文章内から不要な文章を削除
 def clean_text(text):
+    
+    
+    # 「異体字セレクタ」や「制御文字」に該当するやつをゴッソリ除去
+    text = re.sub(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+', '', text)
     
     # ヘッダー部分を削除
     text = clean_header(text)
@@ -168,13 +173,27 @@ def clean_text(text):
     # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
     text = re.sub('|'.join(map(re.escape, replace_list)), '。', text)
     
+    # 電話番号を<PHONE>タグに置き換える
+    text = re.sub(headerfooter_replace.PHONE_PATTERN, '<PHONE>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # 日付を<DATE>タグに置き換える
+    text = re.sub(headerfooter_replace.DATE_PATTERN, '<DATE>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # URLを<URL>タグに置き換える
+    text = re.sub(headerfooter_replace.URL_PATTERN, '<URL>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # 曜日を<DOW>タグに置き換える
+    text = re.sub(headerfooter_replace.DAY_OF_WEEK_PATTERN, '<DOW>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # 連続年度にスペースを
+    text = insert_spaces_between_years(text)
+    
     # 連続するハイフン（ーまたは-）を1つにする
-    text = re.sub(r'[ー\―\-]{2,}', '―', text)
+    text = re.sub(headerfooter_replace.HYPHEN_PATTERN, '―', text, flags=re.VERBOSE | re.IGNORECASE)
 
     # 最終クリーン
     text = re.sub(r'。+', '。', text)
     text = re.sub(r'\(\)|（）|[\(\)]{1}', '', text)
-    text = re.sub(r'\s+', '', text).strip()
     text = re.sub(r'^（代表）', '', text)
     text = re.sub(r'^[）\)]', '', text)
     text = text.strip()

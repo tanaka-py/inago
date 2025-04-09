@@ -632,6 +632,7 @@ async def get_summarize_list(
     if os.path.exists(target_date_path):
         with open(target_date_path, 'r', encoding='utf-8') as f:
             target_date = f.read().strip()
+    #target_date = '2025-04-02'
     
     # 保存データを取得
     list_key = f'{gcs_list_csv_path}/{target_date}.json'

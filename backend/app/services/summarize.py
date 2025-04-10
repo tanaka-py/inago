@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import torch.nn.functional as F
 import networkx as nx
 from ..models import headerfooter_replace
+import unicodedata
 
 # モデルとトークナイザーを設定
 model_name = 'cl-tohoku/bert-base-japanese'
@@ -100,13 +101,11 @@ def clean_header(text):
     
     is_delete = False
     pattern = '|'.join(pattern[0] for pattern in headerfooter_replace.PATTERNS_HEADER)
-    # 「」が直後にない場合にだけマッチさせる正規表現
-    pattern_with_check = r'(' + pattern + r')(?!」)'  # マッチしたパターンの直後に「」がない場合にマッチ
-    match = re.search(pattern_with_check, text)
+    match = re.search(pattern, text)
     if match and match.start() <= 300:
         # マッチした部分までを削除
         #text = re.sub(r'^.*?' + pattern, '', text, count=1)
-        text = re.sub(r'^.*?' + pattern_with_check, '', text, count=1)
+        text = re.sub(r'^.*?(' + pattern + ')', '', text, count=1)
         is_delete = True
     
     if not is_delete:
@@ -124,7 +123,7 @@ def clean_header(text):
 def clean_footer(text):
     
     # すべての "以上" の位置を取得
-    matches = list(re.finditer(r'以上', text))
+    matches = list(re.finditer(r'以[\s　]*上', text))
     
     if matches:
         last_match = matches[-1]  # 最後の "以上" を取得
@@ -143,17 +142,35 @@ def clean_footer(text):
     return text
 
 # 年としてありえる連番がガチガチに詰まってるのを探す
-def insert_spaces_between_years(text):
-    
-    # 年としてありえる連番がガチガチに詰まってるのを探す（8個以上の4桁数字で構成されてるとか）
-    pattern = r'((?:19[8-9]\d|20[0-2]\d){3,})'  # 年が3個以上連続してる
-    matches = re.finditer(pattern, text)
+def insert_spaces_between_years(text, min_years=3):
+    # 年パターン
+    year_pattern = r'(19[8-9]\d|20[0-2]\d)'
+    # 年の連続（最低3つ以上）に直前の文字列をセットで取得
+    pattern = re.compile(rf'(.+?)((?:{year_pattern}){{{min_years},}})')
 
-    for match in matches:
-        chunk = match.group(1)
+    def replacer(match):
+        before = match.group(1)
+        chunk = match.group(2)
         years = [chunk[i:i+4] for i in range(0, len(chunk), 4)]
-        spaced = ' '.join(years)
-        text = text.replace(chunk, spaced)
+        return before + ' ' + ' '.join(years)
+
+    return pattern.sub(replacer, text)
+
+# 数値と単位を_でつなげる
+def combine_number_and_unit(text):
+    unit_pattern = '|'.join(sorted(headerfooter_replace.UNITS, key=len, reverse=True))
+    
+    # 数字と単位の間にスペースがあれば _ を挿入
+    pattern_with_space = rf'(\d[\d,\.]*)\s*({unit_pattern})'
+    
+    # 数字と単位が直接結びついている場合（スペースなし）に _ を挿入
+    pattern_without_space = rf'(\d[\d,\.]*)(?={unit_pattern})'
+    
+    # スペースありのパターンを最初に適用
+    text = re.sub(pattern_with_space, r'\1_\2', text)  # スペースがあれば _ を挿入
+
+    # ここで先読みではなく、実際にunit_patternを対象にしたマッチングに変更
+    text = re.sub(r'(\d[\d,\.]*)(?=' + unit_pattern + r')', r'\1_', text)  # スペースなしでも _ を挿入
 
     return text
 
@@ -164,14 +181,17 @@ def clean_text(text):
     # 「異体字セレクタ」や「制御文字」に該当するやつをゴッソリ除去
     text = re.sub(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+', '', text)
     
+    # 全角英数を半角に
+    text = unicodedata.normalize('NFKC', text)
+    
     # ヘッダー部分を削除
     text = clean_header(text)
     
     # フッター部分を削除
     text = clean_footer(text)
     
-    # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
-    text = re.sub('|'.join(map(re.escape, replace_list)), '。', text)
+    # URLを<URL>タグに置き換える
+    text = re.sub(headerfooter_replace.URL_PATTERN, '<URL>', text, flags=re.VERBOSE | re.IGNORECASE)
     
     # 電話番号を<PHONE>タグに置き換える
     text = re.sub(headerfooter_replace.PHONE_PATTERN, '<PHONE>', text, flags=re.VERBOSE | re.IGNORECASE)
@@ -179,22 +199,28 @@ def clean_text(text):
     # 日付を<DATE>タグに置き換える
     text = re.sub(headerfooter_replace.DATE_PATTERN, '<DATE>', text, flags=re.VERBOSE | re.IGNORECASE)
     
-    # URLを<URL>タグに置き換える
-    text = re.sub(headerfooter_replace.URL_PATTERN, '<URL>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
     # 曜日を<DOW>タグに置き換える
     text = re.sub(headerfooter_replace.DAY_OF_WEEK_PATTERN, '<DOW>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # 数値と単位を結合
+    text = combine_number_and_unit(text)
     
     # 連続年度にスペースを
     text = insert_spaces_between_years(text)
     
     # 連続するハイフン（ーまたは-）を1つにする
     text = re.sub(headerfooter_replace.HYPHEN_PATTERN, '―', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
+    text = re.sub('|'.join(map(re.escape, replace_list)), '。', text, flags=re.VERBOSE | re.IGNORECASE)
 
     # 最終クリーン
     text = re.sub(r'。+', '。', text)
-    text = re.sub(r'\(\)|（）|[\(\)]{1}', '', text)
+    text = re.sub(r'[.。,、]{2,}', '', text)  # 連続した記号をまとめて削除
+    #text = re.sub(r'\(\)|（）|[\(\)]{1}', '', text)
     text = re.sub(r'^（代表）', '', text)
+    text = re.sub(r'^）のお知らせ', '', text)
+    text = re.sub(r'^のお知らせ', '', text)
     text = re.sub(r'^[）\)]', '', text)
     text = text.strip()
 
@@ -290,7 +316,7 @@ def split_sentences_with_janome(text):
         if token_lower in ['。']:
             test = ''
             
-        if not inside_parentheses and token_lower in ['。', '！', '？']:
+        if not inside_parentheses and token_lower in ['。', '！', '!', '？']:
             sentence.append(token.surface)
 
             # ここまでを確定

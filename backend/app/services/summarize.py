@@ -160,17 +160,11 @@ def insert_spaces_between_years(text, min_years=3):
 def combine_number_and_unit(text):
     unit_pattern = '|'.join(sorted(headerfooter_replace.UNITS, key=len, reverse=True))
     
-    # 数字と単位の間にスペースがあれば _ を挿入
-    pattern_with_space = rf'(\d[\d,\.]*)\s*({unit_pattern})'
-    
-    # 数字と単位が直接結びついている場合（スペースなし）に _ を挿入
-    pattern_without_space = rf'(\d[\d,\.]*)(?={unit_pattern})'
+    # 単位と数値の間に_を入れるためのパターン
+    pattern_all = rf'(\d[\d,\.]*)(\s*)({unit_pattern})(?=\b|[^ぁ-んァ-ン一-龥a-zA-Z])'
     
     # スペースありのパターンを最初に適用
-    text = re.sub(pattern_with_space, r'\1_\2', text)  # スペースがあれば _ を挿入
-
-    # ここで先読みではなく、実際にunit_patternを対象にしたマッチングに変更
-    text = re.sub(r'(\d[\d,\.]*)(?=' + unit_pattern + r')', r'\1_', text)  # スペースなしでも _ を挿入
+    text = re.sub(pattern_all, r'\1_\3', text)  # スペースがあれば _ を挿入
 
     return text
 

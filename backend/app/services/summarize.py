@@ -13,8 +13,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import torch.nn.functional as F
 import networkx as nx
-from ..models import headerfooter_replace
 import unicodedata
+from . import cleantext
 
 # モデルとトークナイザーを設定
 model_name = 'cl-tohoku/bert-base-japanese'
@@ -23,11 +23,6 @@ model = BertModel.from_pretrained(model_name)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
-
-# 。に変換する区切りワードを読み込み
-replace_list_path = os.path.join(os.path.dirname(__file__), '../data/summarize_replace.csv')
-replace_list_df = pd.read_csv(replace_list_path, header=None)
-replace_list = replace_list_df.iloc[:,0].to_list()
 
 # 重要単語リスト
 important_keywords_path = os.path.join(os.path.dirname(__file__), '../data/important_keywords.csv')
@@ -96,129 +91,6 @@ def brush_in_parallel(documents, max_workers=3):
     
     return result
 
-# ヘッダー部分を削除
-def clean_header(text):
-    
-    is_delete = False
-    pattern = '|'.join(pattern[0] for pattern in headerfooter_replace.PATTERNS_HEADER)
-    match = re.search(pattern, text)
-    if match and match.start() <= 300:
-        # マッチした部分までを削除
-        #text = re.sub(r'^.*?' + pattern, '', text, count=1)
-        text = re.sub(r'^.*?(' + pattern + ')', '', text, count=1)
-        is_delete = True
-    
-    if not is_delete:
-        # matchオブジェクトが欲しいので finditer を使うお
-        for match in re.finditer(headerfooter_replace.PHONE_PATTERN, text, re.VERBOSE | re.IGNORECASE):
-            digits = re.sub(r'\D', '', match.group())
-            if len(digits) >= 10 and match.start() < 200:
-                # 有効な電話番号っぽい！そこまでズバーンと削除ｗｗｗ
-                text =  text[match.end():]
-                break
-
-    return text
-
-# footer部分を削除
-def clean_footer(text):
-    
-    # すべての "以上" の位置を取得
-    matches = list(re.finditer(r'以[\s　]*上', text))
-    
-    if matches:
-        last_match = matches[-1]  # 最後の "以上" を取得
-        if last_match.start() >= len(text) - 200:
-            text = text[:last_match.start()]    #直前までをリセット
-
-    # 以上を削除したあとまだあるフッター要素を削除
-    patterns = [pattern for pattern, _ in headerfooter_replace.PATTERNS_FOTTER]
-    matches = list(re.finditer('|'.join(map(re.escape, patterns)), text))
-
-    if matches:
-        last_match = matches[-1]
-        if last_match.start() >= len(text) - 200:
-            text = text[:last_match.start()]    #直前までをリセット
-
-    return text
-
-# 年としてありえる連番がガチガチに詰まってるのを探す
-def insert_spaces_between_years(text, min_years=3):
-    # 年パターン
-    year_pattern = r'(19[8-9]\d|20[0-2]\d)'
-    # 年の連続（最低3つ以上）に直前の文字列をセットで取得
-    pattern = re.compile(rf'(.+?)((?:{year_pattern}){{{min_years},}})')
-
-    def replacer(match):
-        before = match.group(1)
-        chunk = match.group(2)
-        years = [chunk[i:i+4] for i in range(0, len(chunk), 4)]
-        return before + ' ' + ' '.join(years)
-
-    return pattern.sub(replacer, text)
-
-# 数値と単位を_でつなげる
-def combine_number_and_unit(text):
-    unit_pattern = '|'.join(sorted(headerfooter_replace.UNITS, key=len, reverse=True))
-    
-    # 単位と数値の間に_を入れるためのパターン
-    pattern_all = rf'(\d[\d,\.]*)(\s*)({unit_pattern})(?=\b|[^ぁ-んァ-ン一-龥a-zA-Z])'
-    
-    # スペースありのパターンを最初に適用
-    text = re.sub(pattern_all, r'\1_\3', text)  # スペースがあれば _ を挿入
-
-    return text
-
-# 開示文章内から不要な文章を削除
-def clean_text(text):
-    
-    
-    # 「異体字セレクタ」や「制御文字」に該当するやつをゴッソリ除去
-    text = re.sub(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+', '', text)
-    
-    # 全角英数を半角に
-    text = unicodedata.normalize('NFKC', text)
-    
-    # ヘッダー部分を削除
-    text = clean_header(text)
-    
-    # フッター部分を削除
-    text = clean_footer(text)
-    
-    # URLを<URL>タグに置き換える
-    text = re.sub(headerfooter_replace.URL_PATTERN, '<URL>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
-    # 電話番号を<PHONE>タグに置き換える
-    text = re.sub(headerfooter_replace.PHONE_PATTERN, '<PHONE>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
-    # 日付を<DATE>タグに置き換える
-    text = re.sub(headerfooter_replace.DATE_PATTERN, '<DATE>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
-    # 曜日を<DOW>タグに置き換える
-    text = re.sub(headerfooter_replace.DAY_OF_WEEK_PATTERN, '<DOW>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
-    # 数値と単位を結合
-    text = combine_number_and_unit(text)
-    
-    # 連続年度にスペースを
-    text = insert_spaces_between_years(text)
-    
-    # 連続するハイフン（ーまたは-）を1つにする
-    text = re.sub(headerfooter_replace.HYPHEN_PATTERN, '―', text, flags=re.VERBOSE | re.IGNORECASE)
-    
-    # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
-    text = re.sub('|'.join(map(re.escape, replace_list)), '。', text, flags=re.VERBOSE | re.IGNORECASE)
-
-    # 最終クリーン
-    text = re.sub(r'。+', '。', text)
-    text = re.sub(r'[.。,、]{2,}', '', text)  # 連続した記号をまとめて削除
-    #text = re.sub(r'\(\)|（）|[\(\)]{1}', '', text)
-    text = re.sub(r'^（代表）', '', text)
-    text = re.sub(r'^）のお知らせ', '', text)
-    text = re.sub(r'^のお知らせ', '', text)
-    text = re.sub(r'^[）\)]', '', text)
-    text = text.strip()
-
-    return text
 
 # 文ごとのBERT埋め込みをバッチ処理で取得（mean pooling を使用）
 def get_sentence_embeddings(sentences, model, tokenizer, device, max_token_length=512, batch_size=32):
@@ -293,6 +165,8 @@ def split_sentences_with_janome(text):
     sentences = []
     sentence = []
     
+    split = ['。', '！', '!', '？']
+    
     # 括弧内フラグ
     inside_parentheses = False
 
@@ -307,10 +181,10 @@ def split_sentences_with_janome(text):
             inside_parentheses = False
         
         # 括弧内でない場合のみ分割トリガー
-        if token_lower in ['。']:
-            test = ''
-            
-        if not inside_parentheses and token_lower in ['。', '！', '!', '？']:
+        if not inside_parentheses and ( 
+            token_lower in split or
+            any( s in token_lower for s in split)
+        ):
             sentence.append(token.surface)
 
             # ここまでを確定
@@ -339,7 +213,7 @@ def summarize_long_document(document, max_token_length=512, stride=256, summariz
     """
     
     # 文書をクリーンアップ
-    document = clean_text(document)
+    document = cleantext.clean_text(document)
     
     # 文の分割
     sentences = split_sentences_with_janome(document)
@@ -402,7 +276,7 @@ def brushup_text(
     ):
     
     # 文書をクリーンアップ
-    document = clean_text(document)
+    document = cleantext.clean_text(document)
     
     # 文の分割
     sentences = split_sentences_with_janome(document)
@@ -410,10 +284,39 @@ def brushup_text(
     if not sentences:
         return ""
     
-    # 低クオリティだけ省く
+    # 不要グループを省いていく
+    test = [
+        low for low in sentences
+        if cleantext.is_exclude_calendar(low)
+    ]
     non_low_priority_sentences = [
         sentence for sentence in sentences
-        if not any(keywords in sentence for keywords in low_priority_keywords)
+        if not any(keywords in sentence for keywords in low_priority_keywords) and  # 登録された不要グループ
+        not cleantext.is_exclude_calendar(sentence) # カレンダーっぽい数字の羅列
     ]
+    
+    # # 元のドキュメントと要約候補たち
+    # doc_original = "連結P/L 13 ホビーサーチ事業の成長等に伴い、連結売上総利益率は低下 単位:百万円 22/3期2Q 23/3期2Q 科目 金額 売上比 金額 売上比 前年同期比 主な要因 売上高 2,004 100.0_% 3,427 100.0_% 171.0_% ホビーサーチM&Aに伴う増収 売上総利益 1,284 64.1_% 1,644 48.0_% 128.0_% 低売上総利益率のホビー商材拡大による率低下 販売費及び 1,232 61.5_% 1,408 41.1_% 114.3_% ホビーサーチの子会社化に伴う費用増加 一般管理費 営業利益 52 2.6_% 236 6.9_% 450.2_% - 経常利益 49 2.5_% 226 6.6_% 454.0_% - 平塚梅屋事業所撤退等に伴う受取補償金45_百万円 四半期純利益 11 0.6_% 171 5.0_% - の計上 。"
+    # summary_1 = "ホビーサーチのM&Aにより、売上高は2,004百万円 → 3,427百万円に増加。 だが、売上総利益率は64.1% → 48.0%と低下。これは利益率の低いホビー商材の拡大が原因だおｗｗｗ"
+    # summary_2 = "売上は前年比171%増と爆増ｗｗｗだが、ホビー商材の比率上昇で売上総利益率は縮小。子会社化によって販管費も増えたけど、営業利益は52 → 236百万円（約4.5倍）に成長！"
+    # summary_3 = "ホビーサーチM&Aで売上総利益：1,284 → 1,644百万円に増加。一方で利益率はダウン…。経常利益は49 → 226百万円に激増＆**平塚梅屋の撤退補償金（45百万円）**も計上されてるおｗｗｗ"
+
+
+    # # ベクトルに変換
+    # docs = [doc_original, summary_1, summary_2, summary_3]
+    # embeddings = [test_embedding(d) for d in docs]
+
+    # # コサイン類似度で元文との近さを測定
+    # similarities = cosine_similarity([embeddings[0]], embeddings[1:])
+    # for i, sim in enumerate(similarities[0]):
+    #     print(f"要約{i+1}との類似度: {sim:.4f}")
         
     return ''.join(non_low_priority_sentences)
+
+# 特徴量の確認に使用する確認用
+def test_embedding(text):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    cls_embedding = outputs.last_hidden_state[:, 0, :]  # [CLS] トークンのベクトルを使用
+    return cls_embedding.squeeze().numpy()

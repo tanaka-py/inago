@@ -3,7 +3,7 @@ import json
 import yfinance as yf
 from datetime import datetime, timedelta
 import pandas as pd
-from . import googleapi, disclosure, finance, mlp, summarize, summarize_work
+from . import googleapi, disclosure, finance, mlp, summarize
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import numpy as np
@@ -642,8 +642,8 @@ async def get_summarize_list(
     data_df = pd.DataFrame(data_list)
     data_df = data_df[['Link']]
     
-    data_df = data_df[~data_df['Link'].apply(is_broken_text)]
-    #data_df = data_df[0:1]
+    #data_df = data_df[~data_df['Link'].apply(is_broken_text)]
+    data_df = data_df[0:1]
     
     links = data_df['Link'].tolist()
     

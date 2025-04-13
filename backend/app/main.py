@@ -31,6 +31,10 @@ app.add_middleware(
 app.include_router(disclosure.router, prefix='/disclosure', tags=['disclosure'])
 app.include_router(pressrelease.router, prefix='/pressrelease', tags=['pressrelease'])
 
+@app.get('/')
+def start():
+    return{'status': 'ok'}
+
 
 
 

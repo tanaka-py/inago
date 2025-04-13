@@ -39,27 +39,27 @@ high_priority_words_path = os.path.join(os.path.dirname(__file__), '../data/high
 high_priority_words_df = pd.read_csv(high_priority_words_path, header=None)
 high_priority_words = high_priority_words_df.iloc[:, 0].to_list()
 
-# 並列で要約処理を回す
-def summarize_in_parallel(documents, max_workers=5):
+# # 並列で要約処理を回す
+# def summarize_in_parallel(documents, max_workers=5):
 
-    start_time = time.time()
+#     start_time = time.time()
     
-    results = []
-    # プロセスごとに処理を並列化
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_document = {executor.submit(summarize_long_document, document): document for document in documents}
-        for future in future_document:
-            try:
-                results.append(future.result())  # 結果をリストに追加
-            except Exception as e:
-                results.append(f'error:{e}')
+#     results = []
+#     # プロセスごとに処理を並列化
+#     with ThreadPoolExecutor(max_workers=max_workers) as executor:
+#         future_document = {executor.submit(summarize_long_document, document): document for document in documents}
+#         for future in future_document:
+#             try:
+#                 results.append(future.result())  # 結果をリストに追加
+#             except Exception as e:
+#                 results.append(f'error:{e}')
                 
-    dif_time = time.time() - start_time
-    minutes = int(dif_time // 60)
-    seconds = dif_time % 60
-    print(f'summarize_in_parallel:{minutes}分{seconds}秒かかった')
+#     dif_time = time.time() - start_time
+#     minutes = int(dif_time // 60)
+#     seconds = dif_time % 60
+#     print(f'summarize_in_parallel:{minutes}分{seconds}秒かかった')
     
-    return results
+#     return results
 
 # 特徴量変換を同時起動
 def embed_in_parallel(documents, max_workers=3):
@@ -165,7 +165,7 @@ def split_sentences_with_janome(text):
     sentences = []
     sentence = []
     
-    split = ['。', '！', '!', '？']
+    split = ['。', '！', '!', '？', '?']
     
     # 括弧内フラグ
     inside_parentheses = False
@@ -204,76 +204,78 @@ def split_sentences_with_janome(text):
     
     return sentences
 
-# 要約メイン処理
-def summarize_long_document(document, max_token_length=512, stride=256, summarize_limit=2000):
-    #print(f'{document[:100]}の開始')
+# 要約メイン処理    未使用
+# def summarize_long_document(document, max_token_length=512, stride=256, summarize_limit=2000):
+#     #print(f'{document[:100]}の開始')
     
-    """
-    k-meansクラスタリングを使った文書要約
-    """
+#     """
+#     k-meansクラスタリングを使った文書要約
+#     """
     
-    # 文書をクリーンアップ
-    document = cleantext.clean_text(document)
+#     # 文書をクリーンアップ
+#     document = cleantext.clean_text(document)
     
-    # 文の分割
-    sentences = split_sentences_with_janome(document)
+#     # 文の分割
+#     sentences = split_sentences_with_janome(document)
     
-    if not sentences:
-        return ""
+#     if not sentences:
+#         return ""
     
-    if len(document) <= summarize_limit:
-        print(f'{summarize_limit}文字以内のため低クオリティだけ省く')
-        non_low_priority_sentences = [
-           sentence for sentence in sentences
-           if not any(keywords in sentence for keywords in low_priority_keywords)
-        ]
-        return ''.join(non_low_priority_sentences)
+#     if len(document) <= summarize_limit:
+#         print(f'{summarize_limit}文字以内のため低クオリティだけ省く')
+#         non_low_priority_sentences = [
+#            sentence for sentence in sentences
+#            if not any(keywords in sentence for keywords in low_priority_keywords)
+#         ]
+#         return ''.join(non_low_priority_sentences)
     
-    # 1. BERTの文埋め込みを取得
-    sentence_embeddings = get_sentence_embeddings(sentences, model, tokenizer, device, max_token_length)
+#     # 1. BERTの文埋め込みを取得
+#     sentence_embeddings = get_sentence_embeddings(sentences, model, tokenizer, device, max_token_length)
     
-    # 2. コサイン類似度行列を計算
-    sentence_embeddings_torch = F.normalize(torch.tensor(sentence_embeddings, dtype=torch.float32, device=device), dim=1)
-    similarity_matrix = (sentence_embeddings_torch @ sentence_embeddings_torch.T).cpu().numpy()
+#     # 2. コサイン類似度行列を計算
+#     sentence_embeddings_torch = F.normalize(torch.tensor(sentence_embeddings, dtype=torch.float32, device=device), dim=1)
+#     similarity_matrix = (sentence_embeddings_torch @ sentence_embeddings_torch.T).cpu().numpy()
     
-    # 3. グラフを作成し、PageRank（TextRank）を適用
-    graph = nx.from_numpy_array(similarity_matrix)
-    scores = nx.pagerank(graph)
+#     # 3. グラフを作成し、PageRank（TextRank）を適用
+#     graph = nx.from_numpy_array(similarity_matrix)
+#     scores = nx.pagerank(graph)
     
-    # 4. 重要度と高いと低いで重みづけ
-    ranked_sentences = sorted(
-        ((scores[i] 
-        + (100 if any(keyword in s for keyword in important_keywords) else 0)  # 重要文なら+100
-        + (50 if any(keyword in s for keyword in high_priority_words) else 0)  # 重要度高め+50
-        - (100 if any(keyword in s for keyword in low_priority_keywords) else 0), s)  # 低優先なら-100
-        for i, s in enumerate(sentences)), 
-        reverse=True
-    )
+#     # 4. 重要度と高いと低いで重みづけ
+#     ranked_sentences = sorted(
+#         ((scores[i] 
+#         + (100 if any(keyword in s for keyword in important_keywords) else 0)  # 重要文なら+100
+#         + (50 if any(keyword in s for keyword in high_priority_words) else 0)  # 重要度高め+50
+#         - (100 if any(keyword in s for keyword in low_priority_keywords) else 0), s)  # 低優先なら-100
+#         for i, s in enumerate(sentences)), 
+#         reverse=True
+#     )
     
-    # 最大文字数までいれていく
-    total_length = 0
-    summary_sentences = []
-    for score, sentence in ranked_sentences:
-        if score < 0:    #優先度がマイナスになってるのは飛ばす(つまり登録しない)
-            continue
+#     # 最大文字数までいれていく
+#     total_length = 0
+#     summary_sentences = []
+#     for score, sentence in ranked_sentences:
+#         if score < 0:    #優先度がマイナスになってるのは飛ばす(つまり登録しない)
+#             continue
         
-        if summarize_limit < len(sentence): # 一つでマックス超えるのは飛ばす
-            continue
+#         if summarize_limit < len(sentence): # 一つでマックス超えるのは飛ばす
+#             continue
         
-        if summarize_limit < total_length + len(sentence):
-            break
+#         if summarize_limit < total_length + len(sentence):
+#             break
         
-        summary_sentences.append(sentence)
-        total_length += len(sentence)
+#         summary_sentences.append(sentence)
+#         total_length += len(sentence)
         
-    summary = ''.join(summary_sentences)
+#     summary = ''.join(summary_sentences)
     
-    return summary
+#     return summary
 
 # 要約ではなく文章から無駄な箇所を省く
 def brushup_text(
-    document
+    document,
+    is_notice = False
     ):
+    print(f'brushup_text:{document[:50]}')
     
     # 文書をクリーンアップ
     document = cleantext.clean_text(document)
@@ -284,26 +286,37 @@ def brushup_text(
     if not sentences:
         return ""
     
+    # お知らせようは重要部分のみ
+    if is_notice:
+        important_sentence = [
+            imp
+            for imp in sentences
+            if any(keyword in imp for keyword in important_keywords) 
+            ]
+        
+        return ''.join(important_sentence)[:1000]
+    
     # 不要グループを省いていく
-    test = [
-        low for low in sentences
-        if cleantext.is_exclude_calendar(low)
-    ]
+    # test = [
+    #     low for low in sentences
+    #     if cleantext.is_exclude_calendar(low)
+    # ]
     non_low_priority_sentences = [
         sentence for sentence in sentences
         if not any(keywords in sentence for keywords in low_priority_keywords) and  # 登録された不要グループ
         not cleantext.is_exclude_calendar(sentence) # カレンダーっぽい数字の羅列
     ]
     
-    # # 元のドキュメントと要約候補たち
-    # doc_original = "連結P/L 13 ホビーサーチ事業の成長等に伴い、連結売上総利益率は低下 単位:百万円 22/3期2Q 23/3期2Q 科目 金額 売上比 金額 売上比 前年同期比 主な要因 売上高 2,004 100.0_% 3,427 100.0_% 171.0_% ホビーサーチM&Aに伴う増収 売上総利益 1,284 64.1_% 1,644 48.0_% 128.0_% 低売上総利益率のホビー商材拡大による率低下 販売費及び 1,232 61.5_% 1,408 41.1_% 114.3_% ホビーサーチの子会社化に伴う費用増加 一般管理費 営業利益 52 2.6_% 236 6.9_% 450.2_% - 経常利益 49 2.5_% 226 6.6_% 454.0_% - 平塚梅屋事業所撤退等に伴う受取補償金45_百万円 四半期純利益 11 0.6_% 171 5.0_% - の計上 。"
-    # summary_1 = "ホビーサーチのM&Aにより、売上高は2,004百万円 → 3,427百万円に増加。 だが、売上総利益率は64.1% → 48.0%と低下。これは利益率の低いホビー商材の拡大が原因だおｗｗｗ"
-    # summary_2 = "売上は前年比171%増と爆増ｗｗｗだが、ホビー商材の比率上昇で売上総利益率は縮小。子会社化によって販管費も増えたけど、営業利益は52 → 236百万円（約4.5倍）に成長！"
-    # summary_3 = "ホビーサーチM&Aで売上総利益：1,284 → 1,644百万円に増加。一方で利益率はダウン…。経常利益は49 → 226百万円に激増＆**平塚梅屋の撤退補償金（45百万円）**も計上されてるおｗｗｗ"
+    # 元のドキュメントと要約候補たち
+    # doc_original = "既存事業も概ね右肩上がりで成長 3,427 (百万円) (百万円) 連結売上高 既存事業*売上高 2,000 2,000 2,004 2,024 基盤構築施策 コロナ禍での 1,800 の影響 1,800 全店休業の 1,781 影響 1,750 1,731 1,719 1,703 1,689 コロナ禍での 1,600 1,649 1,600 1,621 全店休業の 影響 1,523 1,465 1,445 1,400 1,400 0 0 <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> <DATE> 2Q 2Q 2Q 2Q 2Q 2Q 2Q 2Q 2Q 2Q 2Q 2Q 2Q (単体) (単体) (単体) * 既存事業:直前事業年度1年間を通じて同一状態で営業した事業または店舗(前年比において同一条件で比較が可能な事業)。"
+    # summary_1 = "既存事業の売上は順調に増加しており、コロナ禍の影響を受けつつも、全店休業などの影響を乗り越えています。直近の連結売上高は3,427百万円。既存事業の売上高は前年比で増加し、基盤構築施策も進行中。影響を受けた期間があったものの、回復基調にあります。"
+    # summary_2 = "コロナ禍の影響で一時的に全店休業や売上減少がありましたが、既存事業は順調に回復し、売上高は安定して成長しています。直近の売上高は3,427百万円で、基盤構築施策も着実に進行中。前年比で見ると、全体的に右肩上がりの成長が確認されています。"
+    # summary_3 = "コロナの影響を受けたが、既存事業は成長を続け、売上は3,427百万円に達しました。基盤構築施策も実施され、回復の兆しが見えています。前年との比較で売上高は安定しており、全店休業の影響を乗り越えて順調に回復しています。"
+    # summary_4 = "連結売上高は3,427百万円に達し、既存事業の売上高も前年から安定した成長を見せています。特にコロナ禍で全店休業の影響を受けたものの、影響期間を経て、直近の売上は1,689百万円から1,731百万円、さらに1,800百万円を超えるまで回復しています。基盤構築施策も進んでおり、全体的に右肩上がりの成長が確認できます。"
 
 
     # # ベクトルに変換
-    # docs = [doc_original, summary_1, summary_2, summary_3]
+    # docs = [doc_original, summary_1, summary_2, summary_3, summary_4]
     # embeddings = [test_embedding(d) for d in docs]
 
     # # コサイン類似度で元文との近さを測定

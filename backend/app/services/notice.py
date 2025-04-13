@@ -40,7 +40,7 @@ async def summarize_send(
 ):
     #print(f'{row}を要約して送信')
     # 要約
-    text = summarize.summarize_long_document(row.Link, summarize_limit=1000)
+    text = summarize.brushup_text(row.Link, is_notice=True)
     
     for ward in important_words:
         text = re.sub(f'({ward})', r" `\1` ", text, flags=re.IGNORECASE)

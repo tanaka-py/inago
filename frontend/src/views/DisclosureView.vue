@@ -44,6 +44,7 @@ const getAdjustedDate = () => {
 const selectedDate = ref(getAdjustedDate())
 const tooltipRefs = ref([]) // すべてのTooltipの参照を格納
 const isFilterList = ref(false)
+const is_model_data = ref(false)
 
 // リストを絞り込む
 const FilterList = computed(() => {
@@ -138,15 +139,32 @@ watch(inago_list, (newList) => {
   })
 })
 
-onMounted(() => {
-  // nextTick(() => {
-  //   callList()
-  // })
+onMounted(async () => {
+  loadingStore.startLoading()
+
+  try {
+    let res = await axios.get('/disclosure/state')
+    is_model_data.value = res.data.is_model_data
+  }
+  catch (err) {
+    alert(`omMounted:${err}`)
+  }
+  finally {
+    loadingStore.stopLoading()
+  }
 })
 </script>
 
 <template>
   <div class="container mt-5">
+    <div v-if="is_model_data" class="row mt-3">
+      <div class="col">
+        <div class="alert alert-info border rounded-3 shadow-sm p-3">
+          <i class="bi bi-robot me-2"></i> 学習中モデルデータありだお！
+        </div>
+      </div>
+    </div>
+
     <!-- ボタン -->
     <div class="row mt-3">
       <div class="col d-flex justify-content-between">

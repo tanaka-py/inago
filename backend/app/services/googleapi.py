@@ -108,6 +108,23 @@ def download_list(
     
     return json.loads(blob.download_as_text()) if blob and blob.exists() else {}
 
+# 対象の作業データ、モデルを削除
+def delete_data(
+    blob_name
+):
+    # Google Cloud Storage クライアントを作成
+    storage_client = storage.Client.from_service_account_json(google_creds_path)
+    
+    bucket = storage_client.get_bucket(bucket_name)
+    
+    blob = bucket.get_blob(blob_name)
+    
+    if blob is not None:
+        blob.delete()
+    else:
+        print(f'削除対象なし')
+    
+
 # 学習モデルの保存(torch LSTM)
 def upload_model_torch(
     model,

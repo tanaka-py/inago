@@ -41,7 +41,7 @@ async def learning_from_save_data(
     
     if work_load:
         # 作業データ読み込み
-        list_key = f'{gcs_work_csv_path}/{target_date}.json'
+        list_key = f'{gcs_work_csv_path}/work_data.json'
         data_list = googleapi.download_list(list_key)
         
         load_df = pd.DataFrame(data_list)
@@ -163,9 +163,28 @@ async def learning_from_save_data(
     if work_load:
         # work_load後は学習
         # MLP学習
-        if not is_debug:    # デバッグではとらない
-            #mlp.mlp_learning(document_summaries[0:1], features[0:1], targets[0:1])
-            mlp.mlp_learning(document_summaries, features, targets)
+        #mlp.mlp_learning(document_summaries[0:1], features[0:1], targets[0:1])
+        mlp.mlp_learning(document_summaries, features, targets)  
+        
+        # 学習後、次の日付へ
+        # 次のファイルの日付に移動
+        next_date = pd.to_datetime(target_date)
+        for _ in range(10): # 一応10日分回す
+            next_date += timedelta(days=1)
+            next_date_str = next_date.strftime('%Y-%m-%d')
+            next_path = f'{gcs_list_csv_path}/{next_date_str}.json'
+            next_list = googleapi.download_list(next_path)
+            if next_list:
+                # 次の処理日付をファイルに
+                learnsave_path = os.path.join(os.path.dirname(__file__), '../data/next_learndate.txt')
+                if os.path.exists(learnsave_path):
+                    with open(learnsave_path, 'w', encoding='utf-8') as w:
+                        w.write(next_date_str)
+                        break
+                        
+        # 作業データは削除する
+        blob_path = f'{gcs_work_csv_path}/work_data.json'
+        googleapi.delete_data(blob_path)
     else:
         # consleに開示をアップロードする
         googleapi.rewrite_list(
@@ -192,7 +211,7 @@ async def eval_target_list(
     
     # まずはworkの中を見てからそっちにある場合はそっちから
     try:
-        list_key = f'{gcs_work_csv_path}/{target_date}.json'
+        list_key = f'{gcs_work_csv_path}/eval_target.json'
         data_list = googleapi.download_list(list_key)
         
         if not data_list:
@@ -293,7 +312,7 @@ async def eval_target_list(
         # consleに開示をアップロードする
         googleapi.rewrite_list(
                 target_df,
-                f'{gcs_work_csv_path}/{target_date}.json'
+                f'{gcs_work_csv_path}/eval_target.json'
             )
         
   
@@ -642,8 +661,8 @@ async def get_summarize_list(
     data_df = pd.DataFrame(data_list)
     data_df = data_df[['Link']]
     
-    #data_df = data_df[~data_df['Link'].apply(is_broken_text)]
-    data_df = data_df[0:1]
+    data_df = data_df[~data_df['Link'].apply(is_broken_text)]
+    #data_df = data_df[0:4]
     
     links = data_df['Link'].tolist()
     

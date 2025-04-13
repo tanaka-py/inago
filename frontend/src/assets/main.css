@@ -325,4 +325,9 @@ footer {
   border: 1px solid #ddd;
 }
 
+.diff-view {
+  font-family: monospace;
+  white-space: pre;
+}
+
 /* デバッグページの-------------------------------------------------------*/

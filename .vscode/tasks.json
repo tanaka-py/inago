@@ -2,22 +2,24 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Wait for FastAPI",
+      "type": "shell",
+      "command": "node",
+      "args": ["./wait-for-fastapi.js"],
+      "options": {
+        "cwd": "${workspaceFolder}/.vscode"
+      },
+      "problemMatcher": [],
+      "isBackground": true
+    },
+    {
       "label": "npm: dev",
       "type": "npm",
       "script": "dev",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "isBackground": true,
-      "problemMatcher": [],
       "options": {
         "cwd": "${workspaceFolder}/frontend"
       },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared"
-      }
+      "dependsOn": ["Wait for FastAPI"]
     }
   ]
 }

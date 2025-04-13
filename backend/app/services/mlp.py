@@ -114,6 +114,10 @@ def model_load():
 
     return model
 
+# 保存MLPモデルを削除
+def model_delete():
+    googleapi.delete_data(gcs_model_torch_path)
+
 # MLPモデルから株価予測を取得
 def targets_from_model(
     model,

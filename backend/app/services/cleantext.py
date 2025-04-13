@@ -48,12 +48,57 @@ _PHONE_PATTERN = r'''
         
 _DATE_PATTERN = r'''
     (?:
-        [0-9０-９]{4}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}[ \u3000]?月[ \u3000]?[0-9０-９]{1,2}[ \u3000]?日 |  # yyyy年mm月dd日 の形式
-        [0-9０-９]{4}[/-][0-9０-９]{1,2}[/-][0-9０-９]{1,2} |  # yyyy/mm/dd や yyyy-mm-dd の形式
-        [0-9０-９]{1,2}[ \u3000]?月[ \u3000]?[0-9０-９]{1,2}[ \u3000]?日 |  # mm月dd日 の形式
-        [0-9０-９]{4}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}[ \u3000]?月 |   # yyyy年mm月 の形式（2022年3月期のような）
-        [0-9０-９]{1,2}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}[ \u3000]?月   # yy年mm月 の形式（2022年3月期のような）
+        [0-9０-９]{4}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}[ \u3000]?月[ \u3000]?[0-9０-９]{1,2}[ \u3000]?日 |  # yyyy年mm月dd日
+        [0-9０-９]{4}[/-][0-9０-９]{1,2}[/-][0-9０-９]{1,2} |  # yyyy/mm/dd や yyyy-mm-dd
+        [0-9０-９]{1,2}[ \u3000]?月[ \u3000]?[0-9０-９]{1,2}[ \u3000]?日 |  # mm月dd日
+        [0-9０-９]{4}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}[ \u3000]?月 |   # yyyy年mm月（←ここ重要）
+        [0-9０-９]{4}[/-／－][0-9０-９]{1,2} |  # yyyy/mm や yyyy-mm
+        [0-9０-９]{2}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}(?:[ \u3000]?月)   # yy年mm月
     )
+'''
+
+_FISCAL_PATTERN = r'''
+    (?:
+        [0-9０-９]{4}/[0-9０-９]{1,2}期(?:\s*[1-4]Q)? |  # 例: 2023/3期 2Q
+        [0-9０-９]{2}/[0-9０-９]{1,2}期(?:\s*[1-4]Q)? |  # 例: 23/3期, 17/3期 2Q
+        [0-9０-９]{4}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}[ \u3000]?月期 |  # 2022年3月期
+        [0-9０-９]{2}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}[ \u3000]?月期  # 22年3月期
+    )
+'''
+
+_PERIOD_PATTERN = r'''
+    (?:
+        [0-9０-９]{4}[ \u3000]?年[ \u3000]?[0-9０-９]{1,2}(?:[ \u3000]?月)?[ \u3000]?[-～〜][ \u3000]?[0-9０-９]{1,2}[ \u3000]?月 |
+        [0-9０-９]{4}[/／－][ \u3000]?[0-9０-９]{1,2}[ \u3000]?[-～〜][ \u3000]?[0-9０-９]{1,2} |
+        [0-9０-９]{1,2}[ \u3000]?[-～〜][ \u3000]?[0-9０-９]{1,2}[ \u3000]?月
+    )
+'''
+
+
+_MONTH_PATTERN = r'''
+    (?:
+        (?<![0-9０-９])                # 前に数字が続かないことを確認（年などとくっつくのを防ぐ）
+        [0-9０-９]{1,2}                # 半角 or 全角の1～2桁の月
+        [ \u3000]*                    # 半角スペース or 全角スペース（任意）
+        月
+        (?![日0-9０-９])              # 「月日」や「月10日」などの連続を除外
+    )
+'''
+
+_YEAR_PATTERN = r'''
+    (?<![0-9０-９])
+    [0-9０-９]{4}
+    年(?:度)?
+    (?![月期0-9０-９])
+'''
+
+_ESTIMATE_PATTERN = r'''
+    (?<![0-9０-９])                               # 前に数字が続かない
+    [0-9０-９]{4}                                 # 4桁の西暦
+    (?:年(?:度)?)?                                # 年 or 年度（あってもなくてもOK）
+    [\(\（]\s*                                    # カッコ開始（半角/全角）＋空白許容
+    (?:見込み|見通し|予測)                        # キーワード
+    \s*[\)\）]                                     # カッコ終了（半角/全角）＋空白許容
 '''
 
 # ハイフン・長音・水平バー系＋空白を許容して2回以上連続
@@ -67,10 +112,20 @@ _URL_PATTERN = r"""
     [\w\-._~:/?#\[\]@!$&'()*+,;=%]+
 """
 
+_TERM_PATTERN = r'''
+    (?:
+        (?<![0-9０-９])                      # 前に数字がない
+        [0-9０-９]{4}                        # 開始年（例：2021）
+        [\u3000\s\-ー〜～～]?               # スペース or ハイフン or 波ダッシュ（全角・半角含む）
+        [0-9０-９]{4}                        # 終了年（例：2023）
+        年(?:度)?                           # 「年度」または「年」
+    )
+'''
+
 _DAY_OF_WEEK_PATTERN = r'[（(][月火水木金土日][）)]'
 
 # 単位リスト（あとで追加し放題ｗｗｗ）
-_UNITS = ["百万円", "億円", "百万", "万円", "円", "人", "株", "%", "件", "社", "号", "倍"]
+_UNITS = ["百万円", "億円", "百万", "万円", "円", "株", "%", "％", "件", "号", "倍", "ポイント"]
 
 
 # ヘッダー部分を削除
@@ -120,17 +175,20 @@ def _clean_footer(text):
 
 
 # 年としてありえる連番がガチガチに詰まってるのを探す
-def _insert_spaces_between_years(text, min_years=3):
-    # 年パターン
+def _replace_year_sequence_with_token(text, min_years=3):
+    # 年パターン（西暦1980〜2029）
     year_pattern = r'(19[8-9]\d|20[0-2]\d)'
-    # 年の連続（最低3つ以上）に直前の文字列をセットで取得
+
+    # 連続する年（最低3つ）にマッチ
     pattern = re.compile(rf'(.+?)((?:{year_pattern}){{{min_years},}})')
 
     def replacer(match):
         before = match.group(1)
         chunk = match.group(2)
+        # 4桁ずつ分割
         years = [chunk[i:i+4] for i in range(0, len(chunk), 4)]
-        return before + ' ' + ' '.join(years)
+        # ぶち込みコポォｗ
+        return before + ' ' + ' '.join(['<YEAR>'] * len(years))
 
     return pattern.sub(replacer, text)
 
@@ -140,12 +198,19 @@ def _combine_number_and_unit(text):
     unit_pattern = '|'.join(sorted(_UNITS, key=len, reverse=True))
     
     # 単位と数値の間に_を入れるためのパターン
-    pattern_all = rf'(\d[\d,\.]*)(\s*)({unit_pattern})(?=\b|[^ぁ-んァ-ン一-龥a-zA-Z])'
-    
+    pattern_all = rf'(\d+(?:[,.]\d+)?)[\s\u3000]*({unit_pattern})'
+
     # スペースありのパターンを最初に適用
-    text = re.sub(pattern_all, r'\1_\3', text)  # スペースがあれば _ を挿入
+    text = re.sub(pattern_all, r'\1_\2', text)  # スペースがあれば _ を挿入
 
     return text
+
+# 全角英数を半角英数に
+def _convert_zenkaku_alnum_to_hankaku(text):
+    return ''.join(
+        chr(ord(c) - 0xFEE0) if 'Ａ' <= c <= 'Ｚ' or 'ａ' <= c <= 'ｚ' or '０' <= c <= '９' else c
+        for c in text
+    )
 
 # 開示文章内から不要な文章を削除
 def clean_text(text):
@@ -153,7 +218,7 @@ def clean_text(text):
     text = re.sub(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+', '', text)
     
     # 全角英数を半角に
-    text = unicodedata.normalize('NFKC', text)
+    text = _convert_zenkaku_alnum_to_hankaku(text)
     
     # ヘッダー部分を削除
     text = _clean_header(text)
@@ -167,17 +232,35 @@ def clean_text(text):
     # 電話番号を<PHONE>タグに置き換える
     text = re.sub(_PHONE_PATTERN, '<PHONE>', text, flags=re.VERBOSE | re.IGNORECASE)
     
+    # 連続年度にスペースを
+    text = _replace_year_sequence_with_token(text)
+    
+    # 見込みを<ESTIMATE>タグに置き換える
+    text = re.sub(_ESTIMATE_PATTERN, '<ESTIMATE>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # クオーターを<FISCAL>タグに置き換える
+    text = re.sub(_FISCAL_PATTERN, '<FISCAL>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # 期間を<PERIOD>タグに置き換える
+    text = re.sub(_TERM_PATTERN, '<PERIOD>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # 年度期間を<TERM>タグに置き換える
+    text = re.sub(_PERIOD_PATTERN, '<PERIOD>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
     # 日付を<DATE>タグに置き換える
     text = re.sub(_DATE_PATTERN, '<DATE>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # 年を<YEAR>タグに置き換える
+    text = re.sub(_YEAR_PATTERN, '<YEAR>', text, flags=re.VERBOSE | re.IGNORECASE)
+    
+    # 月を<MONTH>タグに置き換える
+    text = re.sub(_MONTH_PATTERN, '<MONTH>', text, flags=re.VERBOSE | re.IGNORECASE)
     
     # 曜日を<DOW>タグに置き換える
     text = re.sub(_DAY_OF_WEEK_PATTERN, '<DOW>', text, flags=re.VERBOSE | re.IGNORECASE)
     
     # 数値と単位を結合
     text = _combine_number_and_unit(text)
-    
-    # 連続年度にスペースを
-    text = _insert_spaces_between_years(text)
     
     # 連続するハイフン（ーまたは-）を1つにする
     text = re.sub(_HYPHEN_PATTERN, '―', text, flags=re.VERBOSE | re.IGNORECASE)

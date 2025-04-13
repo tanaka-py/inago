@@ -1,14 +1,15 @@
 # 開示情報用APIを定義
 import os
 import pandas as pd
-from ..services import disclosure, googleapi, learning
-from ..schemas.disclosure import LearningItem
+from ..services import disclosure, googleapi, learning, mlp
+from ..schemas.disclosure import LearningItem, StatItem
 from fastapi import APIRouter
 
 router = APIRouter()
 
 # 環境変数から会社リストの保存GCSパスを取得
 gcs_list_csv_path = os.getenv('GCS_LIST_CSV_PATH', '')
+gcs_work_csv_path = os.getenv('GCS_WORK_CSV_PATH', '')
 # 収集データを保存して次のページへ行くかどうか
 is_debug = os.getenv('is_debug', 'False').lower() == 'true'
 
@@ -110,20 +111,82 @@ async def confirm_work_data():
 @router.post('/evallist')
 async def get_eval_list(item: LearningItem):
     return await learning.eval_target_list(item.date)
+
+# ワークデータの削除
+@router.post('/deleteworkdata')
+async def delete_work_data():
     
+    blob_path = f'{gcs_work_csv_path}/work_data.json'
     
-@router.get('/dummylist/{select_date}')
-async def get_dummylist():
-    print('get_dummylist')
-    return {
-        'datalist':[
-            {
-                'Time': '22:00',
-                'Code': 'tete',
-                'Name': 'dummy',
-                'Title': 'なんとか株式会社',
-                'Link': 'リンク',
-                'Place': '東証やで'
-            }
-        ]
-    }
+    googleapi.delete_data(blob_path)
+    
+    return {}
+
+# 予測元データの削除
+@router.post('/deleteevaldata')
+async def delete_eval_data():
+    blob_path = f'{gcs_work_csv_path}/eval_target.json'
+    
+    googleapi.delete_data(blob_path)
+    
+    return {}
+
+
+# MLPモデルの削除(作業中データも対象日も全部クリア)
+@router.post('/deletemlpmodel')
+async def delete_mlp_model():
+    
+    # モデルクリア
+    mlp.model_delete()
+    
+    # 作業データクリア
+    blob_path = f'{gcs_work_csv_path}/work_data.json'
+    googleapi.delete_data(blob_path)
+    
+    # 作業対象日をリセット
+    date_path = os.path.join(os.path.dirname(__file__), '../data/next_learndate.txt')
+    if os.path.exists(date_path):
+        with open(date_path, 'w', encoding='utf-8') as w:
+            w.write('2022-11-28')
+    
+    return {}
+    
+# 現在の状態を取得
+@router.get('/state', response_model=StatItem)
+async def get_now_state():
+    
+    # 学習中日付
+    target_date = ''
+    date_path = os.path.join(os.path.dirname(__file__), '../data/next_learndate.txt')
+    if os.path.exists(date_path):
+        with open(date_path, 'r', encoding='utf-8') as r:
+            target_date = r.read()
+            
+    # 学習中ワークデータ確認
+    list_key = f'{gcs_work_csv_path}/work_data.json'
+    data_list = googleapi.download_list(list_key)
+    
+    is_work_data = True
+    if not data_list:
+        is_work_data = False
+        
+    # 学習モデルあり
+    is_model_data = True
+    model = mlp.model_load()
+    if model is None:
+        is_model_data = False 
+        
+        
+    # 評価用作成データあり
+    list_key = f'{gcs_work_csv_path}/eval_target.json'
+    data_list = googleapi.download_list(list_key)
+    is_eval_data = True
+    if not data_list:
+        is_eval_data = False
+            
+    return StatItem(
+        target_date=target_date,
+        is_work_data=is_work_data,
+        is_model_data=is_model_data,
+        is_eval_data = is_eval_data
+    )

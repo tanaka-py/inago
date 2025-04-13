@@ -9,16 +9,13 @@ const loadingStore = useLoadingStore()
 
 const inago_list = ref([])
 
-const selectedDate = ref('2022-11-28')
+const selectedDate = ref('')
+const is_work_data = ref(false)
+const is_model_data = ref(false)
 const tooltipRefs = ref([]) // すべてのTooltipの参照を格納
 
 // 対象日の学習を行う
 const callLearning = async (work_load) => {
-  if (!selectedDate.value) {
-    alert('日付いれいや')
-    return
-  }
-
   loadingStore.startLoading()
 
   nextTick(async () => {
@@ -27,9 +24,12 @@ const callLearning = async (work_load) => {
         date: selectedDate.value,
         work_load: work_load,
       }
-      let tdnet_res = await axios.post('/disclosure/learning', params)
+      let res = await axios.post('/disclosure/learning', params)
 
-      alert(tdnet_res.data.message)
+      if (res.status === 200) {
+        // 現在の状態を再描画
+        reLoading()
+      }
     } catch (error) {
       alert(`call_error! ★tdnet detail=[${error}]`)
     } finally {
@@ -40,39 +40,131 @@ const callLearning = async (work_load) => {
 
 // Tdnet開示アップロード
 const callTdnetUpload = async () => {
-  if (!selectedDate.value) {
-    alert('日付いれいや')
-    return
-  }
 
-  loadingStore.startLoading()
+  alert('今禁止ね')
+  return
 
-  nextTick(async () => {
-    try {
-      let params = {
-        date: selectedDate.value.replace(/-/g, ''),
-      }
-      let tdnet_res = await axios.post('/disclosure/upload', params)
+  // if (!selectedDate.value) {
+  //   alert('日付いれいや')
+  //   return
+  // }
 
-      alert(tdnet_res.data.message)
-    } catch (error) {
-      alert(`call_error! ★tdnet detail=[${error}]`)
-    } finally {
-      loadingStore.stopLoading()
-    }
-  })
+  // loadingStore.startLoading()
+
+  // nextTick(async () => {
+  //   try {
+  //     let params = {
+  //       date: selectedDate.value.replace(/-/g, ''),
+  //     }
+  //     let tdnet_res = await axios.post('/disclosure/upload', params)
+
+  //     alert(tdnet_res.data.message)
+  //   } catch (error) {
+  //     alert(`call_error! ★tdnet detail=[${error}]`)
+  //   } finally {
+  //     loadingStore.stopLoading()
+  //   }
+  // })
 }
 
-onMounted(() => {})
+// 学習前作業データ削除
+const callWorkDataClear = async () => {
+  loadingStore.startLoading()
+
+  try {
+    let res = await axios.post('/disclosure/deleteworkdata')
+
+    if (res.status == 200)
+    {//削除正常
+      reLoading()
+    }
+  }
+  catch (err) {
+    alert(`callWorkDataClear: ${err}`)
+  }
+  finally {
+    loadingStore.stopLoading()
+  }
+}
+
+// モデルクリア
+const callModelDelete = async () => {
+  loadingStore.startLoading()
+
+  try {
+    let res = await axios.post('/disclosure/deletemlpmodel')
+
+    if (res.status === 200) {
+      reLoading()
+    }
+  }
+  catch (err)
+  {
+    alert(`callModelDelete:${err}`)
+  }
+  finally {
+    loadingStore.stopLoading()
+  }
+}
+
+// 現在の状態の読み込み
+const reLoading = async () => {
+  loadingStore.startLoading()
+
+  try {
+    let res = await axios.get('/disclosure/state')
+
+    selectedDate.value = res.data.target_date
+    is_work_data.value = res.data.is_work_data
+    is_model_data.value = res.data.is_model_data
+  }
+  catch (err) {
+    alert(`reLoading:${err}`)
+  }
+  finally
+  {
+    loadingStore.stopLoading()
+  }
+}
+
+// mount
+onMounted(async () => {
+  reLoading()
+})
 </script>
 
 <template>
-  <div class="container mt-5">
+  <div v-if="!loadingStore.isLoading" class="container mt-5">
+    <div class="row mt-3 g-3">
+      <!-- モデルデータ -->
+      <div v-if="is_model_data" class="col-lg-6">
+        <div class="alert alert-info border rounded-3 shadow-sm py-2 px-3 d-flex align-items-center">
+          <i class="bi bi-robot me-2"></i> 学習中モデルデータありだお！
+        </div>
+      </div>
+
+      <!-- 作業データあり -->
+      <div v-if="is_work_data" class="col-lg-6">
+        <div class="alert alert-success border rounded-3 shadow-sm py-2 px-3 d-flex align-items-center">
+          <i class="bi bi-check-circle-fill me-2"></i>
+          現在、<strong class="ms-1">学習前作業データ</strong>で確認中なんだが？ｷﾘｯ
+        </div>
+      </div>
+
+      <!-- 作業データなし -->
+      <div v-else class="col-lg-6">
+        <div class="alert alert-danger border rounded-3 shadow-sm py-2 px-3 d-flex align-items-center">
+          <i class="bi bi-x-circle-fill me-2"></i>
+          現在、<strong class="ms-1">学習前作業データ</strong>が出来ていませんぞ(´；ω；｀)
+        </div>
+      </div>
+    </div>
+
     <!-- 日付入力 -->
     <div class="row mt-3">
       <div class="col">
-        <label for="datePicker">日付:</label>
-        <input type="date" id="datePicker" class="form-control" v-model="selectedDate" />
+        <label for="datePicker">モデル学習対象日:</label>
+        <input type="date" id="datePicker" class="form-control" v-model="selectedDate" disabled />
       </div>
     </div>
 
@@ -80,12 +172,14 @@ onMounted(() => {})
     <div class="row mt-3">
       <div class="col d-flex justify-content-between">
         <button class="btn btn-success" @click="callTdnetUpload">Tdnet開示データ収集</button>
-        <button class="btn btn-secondary" @click="callLearning((work_load = false))">
+        <button class="btn btn-secondary" :disabled="is_work_data" @click="callLearning((work_load = false))">
           データ事前作成
         </button>
-        <button class="btn btn-warning" @click="callLearning((work_load = true))">
+        <button class="btn btn-warning" :disabled="!is_work_data" @click="callLearning((work_load = true))">
           学習
         </button>
+        <button class="btn btn-primary" :disabled="!is_work_data" @click="callWorkDataClear">作業データクリア</button>
+        <button class="btn btn-danger" :disabled="!is_model_data" @click="callModelDelete">モデルクリア</button>
       </div>
     </div>
 

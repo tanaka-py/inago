@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import numpy as np
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import warnings # いったん
 # 特定の警告を無視する
@@ -34,10 +35,6 @@ async def learning_from_save_data(
     features = []
     targets = []
     documents = []
-    document_summaries = []
-    debug_data = []
-        
-    total_count = 0
     
     if work_load:
         # 作業データ読み込み
@@ -48,9 +45,7 @@ async def learning_from_save_data(
         
         features = load_df['features']
         targets = load_df['targets']
-        document_summaries = load_df['document_summaries']
-        
-        total_count = len(features)
+        documents = load_df['documents']
         
     else:
         
@@ -67,86 +62,14 @@ async def learning_from_save_data(
         # 2. 株価データの特徴量作成
         print(f'総件数：{len(data_list)}')
         
-        for item in data_list:
-            total_count += 1
-            
-            if is_broken_text(item['Link']):
-                print(f'開示文章が文字化けしてるためスルー：{item['Code']}')
-                continue
-            
-            # 過去3か月の株価たちを取得
-            past_start_date = pd.to_datetime(item['Date'])
-            past_stock_json, past_n225_json, past_growth_json = disclosure.get_amonth_finance(
-                item['Code'],
-                past_start_date,
-                True
+        # 開示文章クリーン、指標特徴量、結果取得
+        features, documents, targets = get_org_workdata_in_parallel(
+            data_list,
+            target_date,
+            is_target=True
             )
-            
-            # JSONデータをDataFrameに変換
-            if not past_stock_json:
-                print(f'過去株価がないため特徴量が入れれないスルー：{item['Code']}') 
-                continue
-            if not past_n225_json:
-                print(f'過去日経株価がないため特徴量が入れれないスルー：{item['Code']}') 
-                continue
-            if not past_growth_json:
-                print(f'過去グロース株価がないため特徴量が入れれないスルー：{item['Code']}') 
-                continue
-            
-            df_stock = pd.DataFrame(json.loads(past_stock_json))
-            df_nikkei = pd.DataFrame(json.loads(past_n225_json))
-            df_mothers = pd.DataFrame(json.loads(past_growth_json))
-            df_stock_targets = pd.DataFrame(json.loads(item['Stock']))  # 結果用
-            
-            if df_stock_targets.empty:
-                print(f'予想用株価がないためスルー：{item['Code']}') 
-                continue
-            
-            # 財務情報を取得
-            wk_stock = df_stock_targets[df_stock_targets['Date'] == target_date]
-            if wk_stock.empty:
-                print(f'{item['Code']}：対象日の財務データがとれないのは対象外')
-                continue
-            
-            code = item['Code']
-            first_stock_open = wk_stock.iloc[0]['Open']
-            # 開示日
-            disclosure_date = pd.to_datetime(item["DateKey"])
-            
-            # 各指標特徴量取得
-            aggregated_features = calculate_aggregated_features(
-                code,
-                first_stock_open,
-                df_stock, 
-                df_nikkei, 
-                df_mothers, 
-                df_stock_targets,
-                target_date, 
-                disclosure_date
-                )
-            if aggregated_features is None:
-                continue
-            
-            # 開示日から各ターゲットの日数後の変動率を計算(求める結果)
-            days_list = [0, 3, 7, 14, 21, 28, 35, 42, 49]
-            rates = get_last_valid_change_rate(df_stock_targets, days_list)
-            
-            if any(rate is None or rate == -9999 for rate in rates):
-                print(f'{item['Code']}：結果株価変化率がとれないのは対象外')
-                continue
-            
-            targets.append(rates)
-
-            # 特徴量リストに追加
-            features.append(aggregated_features)
-            
-            # 開示をセット
-            documents.append(item["Link"])
-        
-        # 要約ではなく、元の文章からいらんもんを省くスタイルで
-        document_summaries = [summarize.brushup_text(document) for document in documents]
     
-    print(f'総件数：{total_count} features件数：{len(features)} targets件数：{len(targets)} documents件数：{len(document_summaries)}')
+    print(f'features件数：{len(features)} targets件数：{len(targets)} documents件数：{len(documents)}')
     
     if len(targets) < 1:
         # 対象がない
@@ -157,14 +80,14 @@ async def learning_from_save_data(
     work_df = pd.DataFrame({
             'features': features,
             'targets': targets,
-            'document_summaries': document_summaries
+            'documents': documents
         })
     
     if work_load:
         # work_load後は学習
         # MLP学習
         #mlp.mlp_learning(document_summaries[0:1], features[0:1], targets[0:1])
-        mlp.mlp_learning(document_summaries, features, targets)  
+        mlp.mlp_learning(documents, features, targets)  
         
         # 学習後、次の日付へ
         # 次のファイルの日付に移動
@@ -194,6 +117,117 @@ async def learning_from_save_data(
         
     # 表示用の場合に一応返却
     return work_df
+
+# 平行で特徴量元ゲット
+def get_org_workdata_in_parallel(
+    data_list,
+    target_date,
+    is_target,   # 結果も取得
+    max_workers=10
+):
+    features = []
+    targets = []
+    documents = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_item = [executor.submit(get_org_workdata, item, target_date, is_target) for item in data_list]
+        for futureitemin in future_to_item:
+            try:
+                feature, document, rate = futureitemin.result()
+                
+                # どちらかの特徴量がない
+                if feature is None or document is None:
+                    continue
+                
+                if is_target and rate is None:
+                    # 結果必要なのにないよ
+                        continue
+                
+                features.append(feature)
+                documents.append(document)
+                
+                if is_target:
+                    targets.append(rate)
+            except Exception as e:
+                print(f"Error: {e}")
+                
+    return features, documents, targets
+
+# １開示に対するの特徴量を取得
+def get_org_workdata(
+    item,
+    target_date,
+    is_target
+):
+    if is_broken_text(item['Link']):
+        print(f"開示文章が文字化けしてるためスルー：{item['Code']}")
+        return None, None, None
+    
+    # 過去3か月の株価たちを取得
+    past_start_date = pd.to_datetime(item['Date'])
+    past_stock_json, past_n225_json, past_growth_json = disclosure.get_amonth_finance(
+        item['Code'],
+        past_start_date,
+        True
+    )
+    
+    # JSONデータをDataFrameに変換
+    if not past_stock_json:
+        print(f"過去株価がないため特徴量が入れれないスルー：{item['Code']}") 
+        return None, None, None
+    if not past_n225_json:
+        print(f"過去日経株価がないため特徴量が入れれないスルー：{item['Code']}") 
+        return None, None, None
+    if not past_growth_json:
+        print(f"過去グロース株価がないため特徴量が入れれないスルー：{item['Code']}") 
+        return None, None, None
+    
+    df_stock = pd.DataFrame(json.loads(past_stock_json))
+    df_nikkei = pd.DataFrame(json.loads(past_n225_json))
+    df_mothers = pd.DataFrame(json.loads(past_growth_json))
+    df_stock_targets = pd.DataFrame(json.loads(item['Stock']))  # 結果用
+    
+    if df_stock_targets.empty:
+        print(f"予想用株価がないためスルー：{item['Code']}") 
+        return None, None, None
+    
+    # 財務情報を取得
+    wk_stock = df_stock_targets[df_stock_targets['Date'] == target_date]
+    if wk_stock.empty:
+        print(f"{item['Code']}：対象日の財務データがとれないのは対象外")
+        return None, None, None
+    
+    code = item['Code']
+    first_stock_open = wk_stock.iloc[0]['Open']
+    # 開示日
+    disclosure_date = pd.to_datetime(item["DateKey"])
+    
+    # 各指標特徴量取得
+    aggregated_features = calculate_aggregated_features(
+        code,
+        first_stock_open,
+        df_stock, 
+        df_nikkei, 
+        df_mothers, 
+        df_stock_targets,
+        target_date, 
+        disclosure_date
+        )
+    if aggregated_features is None:
+        print(f"{item['Code']}：指標特徴率がとれないのは対象外")
+        return None, None, None
+    
+    # 開示日から各ターゲットの日数後の変動率を計算(求める結果)
+    rates = None
+    if is_target:
+        days_list = [0, 3, 7, 14, 21, 28, 35, 42, 49]
+        rates = get_last_valid_change_rate(df_stock_targets, days_list)
+        
+        if any(rate is None or rate == -9999 for rate in rates):
+            print(f"{item['Code']}：結果株価変化率がとれないのは対象外")
+            return None, None, None
+    
+    return aggregated_features, summarize.brushup_text(item["Link"]), rates
+    
     
 # 株価予想一覧取得
 async def eval_target_list(
@@ -203,7 +237,7 @@ async def eval_target_list(
     # 特徴量素材
     features = []
     documents = []
-    document_summaries = []
+    targets = []
         
     total_count = 0
     is_reload = False
@@ -219,7 +253,7 @@ async def eval_target_list(
         else:
             target_df = pd.DataFrame(data_list)
             features = target_df['features']
-            document_summaries = target_df['document_summaries']
+            documents = target_df['documents']
             
     except Exception as e:
         print("保存データがないため取得しなおし")
@@ -234,80 +268,17 @@ async def eval_target_list(
         # 2. 株価データの特徴量作成
         print(f'総件数：{len(data_list)}')
         
-        for item in data_list:
-            total_count += 1
-            
-            if is_broken_text(item['Link']):
-                print(f'開示文章が文字化けしてるためスルー：{item['Code']}')
-                continue
-            
-            # 過去3か月の株価たちを取得
-            past_start_date = pd.to_datetime(item['Date'])
-            past_stock_json, past_n225_json, past_growth_json = disclosure.get_amonth_finance(
-                item['Code'],
-                past_start_date,
-                True
+        # 開示文章クリーン、指標特徴量取得
+        features, documents, targets = get_org_workdata_in_parallel(
+            data_list,
+            target_date,
+            is_target=False
             )
-            
-            # JSONデータをDataFrameに変換
-            if not past_stock_json:
-                print(f'過去株価がないため特徴量が入れれないスルー：{item['Code']}') 
-                continue
-            if not past_n225_json:
-                print(f'過去日経株価がないため特徴量が入れれないスルー：{item['Code']}') 
-                continue
-            if not past_growth_json:
-                print(f'過去グロース株価がないため特徴量が入れれないスルー：{item['Code']}') 
-                continue
-            
-            df_stock = pd.DataFrame(json.loads(past_stock_json))
-            df_nikkei = pd.DataFrame(json.loads(past_n225_json))
-            df_mothers = pd.DataFrame(json.loads(past_growth_json))
-            this_date_stock = disclosure.target_date_open_stock(past_start_date, item['Code'])
-            df_stock_targets = pd.DataFrame(json.loads(this_date_stock))  # 結果用
-            
-            if df_stock_targets.empty:
-                print(f'予想用株価がないためスルー：{item['Code']}') 
-                continue
-            
-            # 財務情報を取得
-            wk_stock = df_stock_targets[df_stock_targets['Date'] == target_date]
-            if wk_stock.empty:
-                print(f'{item['Code']}：対象日の財務データがとれないのは対象外')
-                continue
-            
-            code = item['Code']
-            first_stock_open = wk_stock.iloc[0]['Open']
-            # 開示日
-            disclosure_date = pd.to_datetime(item["DateKey"])
-            
-            # 各指標特徴量取得
-            aggregated_features = calculate_aggregated_features(
-                code,
-                first_stock_open,
-                df_stock, 
-                df_nikkei, 
-                df_mothers, 
-                df_stock_targets,
-                target_date, 
-                disclosure_date
-                )
-            if aggregated_features is None:
-                continue
-
-            # 特徴量リストに追加
-            features.append(aggregated_features)
-            
-            # 開示をセット
-            documents.append(item["Link"])
-        
-        # 要約ではなく、元の文章からいらんもんを省くスタイルで
-        document_summaries = [summarize.brushup_text(document) for document in documents]
         
         # DataFrameに格納
         target_df = pd.DataFrame({
                 'features': features,
-                'document_summaries': document_summaries
+                'documents': documents
             })
         # consleに開示をアップロードする
         googleapi.rewrite_list(
@@ -316,7 +287,7 @@ async def eval_target_list(
             )
         
   
-    print(f'総件数：{total_count} features件数：{len(features)} documents件数：{len(document_summaries)}')
+    print(f'総件数：{total_count} features件数：{len(features)} documents件数：{len(documents)}')
     
     model = mlp.model_load()
     
@@ -324,7 +295,7 @@ async def eval_target_list(
         print('modelが読み込めないため予測が出来ません')
     else:
         # 予想変化率を取得
-        target_df['targets'] = target_df.apply(lambda row: mlp.targets_from_model(model, row['document_summaries'], row['features']), axis=1) 
+        target_df['targets'] = target_df.apply(lambda row: mlp.targets_from_model(model, row['documents'], row['features']), axis=1) 
     
     return target_df.to_dict(orient="records")
     

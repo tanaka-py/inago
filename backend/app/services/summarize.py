@@ -93,27 +93,27 @@ def brush_in_parallel(documents, max_workers=3):
 
 
 # 文ごとのBERT埋め込みをバッチ処理で取得（mean pooling を使用）
-def get_sentence_embeddings(sentences, model, tokenizer, device, max_token_length=512, batch_size=32):
-    embeddings = []
+# def get_sentence_embeddings(sentences, model, tokenizer, device, max_token_length=512, batch_size=32):
+#     embeddings = []
 
-    # バッチ処理で文を分ける
-    for i in range(0, len(sentences), batch_size):
-        batch_sentences = sentences[i:i + batch_size]
+#     # バッチ処理で文を分ける
+#     for i in range(0, len(sentences), batch_size):
+#         batch_sentences = sentences[i:i + batch_size]
 
-        # トークナイズを一括で処理
-        inputs = tokenizer(batch_sentences, return_tensors="pt", truncation=True, 
-                           max_length=max_token_length, padding="longest")
-        inputs = {key: value.to(device) for key, value in inputs.items()}
+#         # トークナイズを一括で処理
+#         inputs = tokenizer(batch_sentences, return_tensors="pt", truncation=True, 
+#                            max_length=max_token_length, padding="longest")
+#         inputs = {key: value.to(device) for key, value in inputs.items()}
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+#         with torch.no_grad():
+#             outputs = model(**inputs)
 
-        # mean pooling
-        batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
-        embeddings.append(batch_embeddings)
+#         # mean pooling
+#         batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+#         embeddings.append(batch_embeddings)
 
-    # すべてのバッチの結果を結合
-    return np.concatenate(embeddings, axis=0)  # 直接2D numpy配列を返す
+#     # すべてのバッチの結果を結合
+#     return np.concatenate(embeddings, axis=0)  # 直接2D numpy配列を返す
 
 # 特徴量を取得(model学習用)
 def get_text_embeddings(text, max_token_length=512, batch_size=32):

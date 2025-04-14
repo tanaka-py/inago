@@ -102,7 +102,7 @@ _ESTIMATE_PATTERN = r'''
 '''
 
 # ハイフン・長音・水平バー系＋空白を許容して2回以上連続
-_HYPHEN_PATTERN = r'(?:[ \u3000]*[―ー‐－\-–—﹘=#＃◎✓〇﹣][ \u3000]*){2,}'
+_HYPHEN_PATTERN = r'(?:[ \u3000]*[ー‐－\-–—﹘=#＃﹣][ \u3000]*){2,}'
 
 _URL_PATTERN = r"""
     (?:
@@ -125,28 +125,57 @@ _TERM_PATTERN = r'''
 _DAY_OF_WEEK_PATTERN = r'[（(][月火水木金土日][）)]'
 
 # 単位リスト（あとで追加し放題ｗｗｗ）
-_UNITS = ["百万円", "億円", "百万", "万円", "円", "株", "%", "％", "件", "号", "倍", "ポイント"]
+_UNITS = ["百万円", "億円", "百万", "万円", "千円", "円", "株", "%", "％", "件", "号", "倍", "ポイント"]
+_UNIT_PATTERN = '|'.join(sorted(map(re.escape, _UNITS), key=len, reverse=True))
 
+# 事前コンパイルパターンたち（お守り装備コポォ）
+_RE_REMOVE_CHARS = re.compile(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+')
+_RE_URL = re.compile(_URL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_PHONE = re.compile(_PHONE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_ESTIMATE = re.compile(_ESTIMATE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_FISCAL = re.compile(_FISCAL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_TERM = re.compile(_TERM_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_PERIOD = re.compile(_PERIOD_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_DATE = re.compile(_DATE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_YEAR = re.compile(_YEAR_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_MONTH = re.compile(_MONTH_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_DOW = re.compile(_DAY_OF_WEEK_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_HYPHEN = re.compile(_HYPHEN_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_REPLACE_LIST = re.compile('|'.join(map(re.escape, replace_list)), flags=re.VERBOSE | re.IGNORECASE)
+_RE_MULTIPLE_PERIODS = re.compile(r'。+')
+_RE_SYMBOLS = re.compile(r'[.。,、]{2,}')
+_RE_HEAD_REP = re.compile(r'^（代表）')
+_RE_HEAD_NOTICE = re.compile(r'^）のお知らせ')
+_RE_HEAD_NOTICE2 = re.compile(r'^のお知らせ')
+_RE_HEAD_CLOSING = re.compile(r'^[）\)]')
+_COMBINE_UNIT_RE = re.compile(rf'(\d+(?:[,.]\d+)?)[\s\u3000]*({_UNIT_PATTERN})')
+
+_HEADER_PATTERN = re.compile('|'.join(pattern[0] for pattern in _PATTERNS_HEADER))
+
+_FOOTER_PATTERN_1 = re.compile(r'以[\s　]*上')
+_FOTTER_PATTERN_2 = re.compile('|'.join(map(re.escape, [p[0] for p in _PATTERNS_FOTTER])))
+
+_ZENKAKU = '０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ'
+_HANKAKU = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+_ZEN2HAN_TABLE = str.maketrans(_ZENKAKU, _HANKAKU)
 
 # ヘッダー部分を削除
 def _clean_header(text):
     
     is_delete = False
-    pattern = '|'.join(pattern[0] for pattern in _PATTERNS_HEADER)
-    match = re.search(pattern, text)
+    match = re.search(_HEADER_PATTERN, text)
     if match and match.start() <= 300:
         # マッチした部分までを削除
-        #text = re.sub(r'^.*?' + pattern, '', text, count=1)
-        text = re.sub(r'^.*?(' + pattern + ')', '', text, count=1)
+        text = re.sub(r'^.*?(' + _HEADER_PATTERN.pattern + ')', '', text, count=1)
         is_delete = True
     
     if not is_delete:
         # matchオブジェクトが欲しいので finditer を使うお
-        for match in re.finditer(_PHONE_PATTERN, text, re.VERBOSE | re.IGNORECASE):
+        for match in re.finditer(_RE_PHONE, text):
             digits = re.sub(r'\D', '', match.group())
             if len(digits) >= 10 and match.start() < 200:
                 # 有効な電話番号っぽい！そこまでズバーンと削除ｗｗｗ
-                text =  text[match.end():]
+                text = text[match.end():]
                 break
 
     return text
@@ -155,7 +184,7 @@ def _clean_header(text):
 def _clean_footer(text):
     
     # すべての "以上" の位置を取得
-    matches = list(re.finditer(r'以[\s　]*上', text))
+    matches = list(re.finditer(_FOOTER_PATTERN_1, text))
     
     if matches:
         last_match = matches[-1]  # 最後の "以上" を取得
@@ -163,8 +192,7 @@ def _clean_footer(text):
             text = text[:last_match.start()]    #直前までをリセット
 
     # 以上を削除したあとまだあるフッター要素を削除
-    patterns = [pattern for pattern, _ in _PATTERNS_FOTTER]
-    matches = list(re.finditer('|'.join(map(re.escape, patterns)), text))
+    matches = list(re.finditer(_FOTTER_PATTERN_2, text))
 
     if matches:
         last_match = matches[-1]
@@ -195,90 +223,79 @@ def _replace_year_sequence_with_token(text, min_years=3):
 
 # 数値と単位を_でつなげる
 def _combine_number_and_unit(text):
-    unit_pattern = '|'.join(sorted(_UNITS, key=len, reverse=True))
-    
-    # 単位と数値の間に_を入れるためのパターン
-    pattern_all = rf'(\d+(?:[,.]\d+)?)[\s\u3000]*({unit_pattern})'
-
-    # スペースありのパターンを最初に適用
-    text = re.sub(pattern_all, r'\1_\2', text)  # スペースがあれば _ を挿入
-
-    return text
+    return _COMBINE_UNIT_RE.sub(r'\1_\2', text)
 
 # 全角英数を半角英数に
 def _convert_zenkaku_alnum_to_hankaku(text):
-    return ''.join(
-        chr(ord(c) - 0xFEE0) if 'Ａ' <= c <= 'Ｚ' or 'ａ' <= c <= 'ｚ' or '０' <= c <= '９' else c
-        for c in text
-    )
+    return text.translate(_ZEN2HAN_TABLE)
 
-# 開示文章内から不要な文章を削除
+
 def clean_text(text):
     # 「異体字セレクタ」や「制御文字」に該当するやつをゴッソリ除去
-    text = re.sub(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+', '', text)
-    
+    text = _RE_REMOVE_CHARS.sub('', text)
+
     # 全角英数を半角に
     text = _convert_zenkaku_alnum_to_hankaku(text)
-    
+
     # ヘッダー部分を削除
     text = _clean_header(text)
-    
+
     # フッター部分を削除
     text = _clean_footer(text)
-    
+
     # URLを<URL>タグに置き換える
-    text = re.sub(_URL_PATTERN, '<URL>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_URL.sub('<URL>', text)
+
     # 電話番号を<PHONE>タグに置き換える
-    text = re.sub(_PHONE_PATTERN, '<PHONE>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_PHONE.sub('<PHONE>', text)
+
     # 連続年度にスペースを
     text = _replace_year_sequence_with_token(text)
-    
+
     # 見込みを<ESTIMATE>タグに置き換える
-    text = re.sub(_ESTIMATE_PATTERN, '<ESTIMATE>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_ESTIMATE.sub('<ESTIMATE>', text)
+
     # クオーターを<FISCAL>タグに置き換える
-    text = re.sub(_FISCAL_PATTERN, '<FISCAL>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_FISCAL.sub('<FISCAL>', text)
+
     # 期間を<PERIOD>タグに置き換える
-    text = re.sub(_TERM_PATTERN, '<PERIOD>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_TERM.sub('<PERIOD>', text)
+
     # 年度期間を<TERM>タグに置き換える
-    text = re.sub(_PERIOD_PATTERN, '<PERIOD>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_PERIOD.sub('<PERIOD>', text)
+
     # 日付を<DATE>タグに置き換える
-    text = re.sub(_DATE_PATTERN, '<DATE>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_DATE.sub('<DATE>', text)
+
     # 年を<YEAR>タグに置き換える
-    text = re.sub(_YEAR_PATTERN, '<YEAR>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_YEAR.sub('<YEAR>', text)
+
     # 月を<MONTH>タグに置き換える
-    text = re.sub(_MONTH_PATTERN, '<MONTH>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_MONTH.sub('<MONTH>', text)
+
     # 曜日を<DOW>タグに置き換える
-    text = re.sub(_DAY_OF_WEEK_PATTERN, '<DOW>', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    text = _RE_DOW.sub('<DOW>', text)
+
     # 数値と単位を結合
     text = _combine_number_and_unit(text)
-    
+
     # 連続するハイフン（ーまたは-）を1つにする
-    text = re.sub(_HYPHEN_PATTERN, '―', text, flags=re.VERBOSE | re.IGNORECASE)
-    
+    #text = _RE_HYPHEN.sub('―', text)
+
     # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
-    text = re.sub('|'.join(map(re.escape, replace_list)), '。', text, flags=re.VERBOSE | re.IGNORECASE)
+    text = _RE_REPLACE_LIST.sub('。', text)
 
     # 最終クリーン
-    text = re.sub(r'。+', '。', text)
-    text = re.sub(r'[.。,、]{2,}', '', text)  # 連続した記号をまとめて削除
-    #text = re.sub(r'\(\)|（）|[\(\)]{1}', '', text)
-    text = re.sub(r'^（代表）', '', text)
-    text = re.sub(r'^）のお知らせ', '', text)
-    text = re.sub(r'^のお知らせ', '', text)
-    text = re.sub(r'^[）\)]', '', text)
+    text = _RE_MULTIPLE_PERIODS.sub('。', text)
+    text = _RE_SYMBOLS.sub('', text)
+    text = _RE_HEAD_REP.sub('', text)
+    text = _RE_HEAD_NOTICE.sub('', text)
+    text = _RE_HEAD_NOTICE2.sub('', text)
+    text = _RE_HEAD_CLOSING.sub('', text)
     text = text.strip()
 
     return text
+
 
 #### ↓　開示内にて表とだったであろうグループを特定 #############################################
 def is_exclude_calendar(line):

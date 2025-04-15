@@ -116,6 +116,9 @@ async def get_list(
         (~df_filters['Title'].str.contains('|'.join(exclusion_title), case=False, na=False))
         ]
     
+    if df_filters.empty:
+        return None
+    
     # PDFの中身を要約してセット
     df_filters[['Link', 'Title']] = df_filters['Title'].apply(lambda x: pd.Series(extract_pdfurl(x)))
     # 並列で処理を行うように修正 applyではなくmapとなる

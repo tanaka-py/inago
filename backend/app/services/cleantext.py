@@ -180,6 +180,24 @@ _UNITS_NONE = [
 
 _UNIT_PATTERN = '|'.join(sorted(map(re.escape, _UNITS), key=len, reverse=True))
 
+_RE_RANGE_WITH_UNIT = re.compile(r'''
+    (?P<sign>[＋+△▲−ー－])?     # 符号（任意）
+    (?P<start>\d+)              # 開始数値
+    -
+    (?P<end>\d+)                # 終了数値
+    _(?P<unit>%s)               # アンダースコア＋単位が続く場合だけ！
+''' % _UNIT_PATTERN)
+
+_SIGNED_NUMBER_PATTERN = r'''
+    (?:                                # 非キャプチャグループで包むお
+        (?P<plus>[＋+])                # 全角＋ or 半角+（命名キャプチャ）
+        (?P<plusnum>\d+)              # 数字（1回以上）
+      |
+        (?P<minus>[△▲−ー－-])         # 多様なマイナス記号（全角・長音含む）
+        (?P<minusnum>\d+)             # 数字（1回以上）
+    )
+'''
+
 # 事前コンパイルパターンたち（お守り装備コポォ）
 _RE_REMOVE_CHARS = re.compile(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+')
 _RE_URL = re.compile(_URL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
@@ -194,6 +212,7 @@ _RE_MONTH = re.compile(_MONTH_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_DAY = re.compile(_DAY_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_DOW = re.compile(_DAY_OF_WEEK_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_TIME = re.compile(_TIME_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_SIGNED_NUM = re.compile(_SIGNED_NUMBER_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_REPLACE_LIST = re.compile('|'.join(map(re.escape, replace_list)), flags=re.VERBOSE | re.IGNORECASE)
 _RE_MULTIPLE_PERIODS = re.compile(r'。+')
 _RE_SYMBOLS = re.compile(r'[.。,、]{2,}')
@@ -290,10 +309,32 @@ def _combine_number_and_unit(text):
     
     return _COMBINE_UNIT_RE.sub(unit_replacer, text)
 
+# 記号レンジの結合
+def _normalize_range(text):
+    def range_replacer(m):
+        for test in _RE_RANGE_WITH_UNIT.finditer(text):
+            print("Matched:", test.group(0))
+        sign = "+" if m.group("sign") in "＋+" else "-"
+        return f"{sign}_{m.group('start')}-{m.group('end')}_{m.group('unit')}"
+    return _RE_RANGE_WITH_UNIT.sub(range_replacer, text)
+
 # 全角英数を半角英数に
 def _convert_zenkaku_alnum_to_hankaku(text):
     return text.translate(_ZEN2HAN_TABLE)
 
+# +-と数値を_でつなげる
+def _normalize_signed_number(text):
+    
+    # 先にrangeのほうを
+    text = _normalize_range(text)
+    
+    def signed_replacer(match):
+        if match.group("plus"):
+            return f"+_{match.group('plusnum')}"
+        elif match.group("minus"):
+            return f"-_{match.group('minusnum')}"
+        return match.group(0)
+    return _RE_SIGNED_NUM.sub(signed_replacer, text)
 
 def clean_text(text):
     # 「異体字セレクタ」や「制御文字」に該当するやつをゴッソリ除去
@@ -349,6 +390,9 @@ def clean_text(text):
 
     # 数値と単位を結合
     text = _combine_number_and_unit(text)
+    
+    # +-と数値を結合
+    text = _normalize_signed_number(text)
 
     # 連続するハイフン（ーまたは-）を1つにする
     #text = _RE_HYPHEN.sub('―', text)

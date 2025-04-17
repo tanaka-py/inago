@@ -180,14 +180,6 @@ _UNITS_NONE = [
 
 _UNIT_PATTERN = '|'.join(sorted(map(re.escape, _UNITS), key=len, reverse=True))
 
-_RE_RANGE_WITH_UNIT = re.compile(r'''
-    (?P<sign>[＋+△▲−ー－])?     # 符号（任意）
-    (?P<start>\d+)              # 開始数値
-    -
-    (?P<end>\d+)                # 終了数値
-    _(?P<unit>%s)               # アンダースコア＋単位が続く場合だけ！
-''' % _UNIT_PATTERN)
-
 _SIGNED_NUMBER_PATTERN = r'''
     (?:                                # 非キャプチャグループで包むお
         (?P<plus>[＋+])                # 全角＋ or 半角+（命名キャプチャ）
@@ -196,6 +188,18 @@ _SIGNED_NUMBER_PATTERN = r'''
         (?P<minus>[△▲−ー－-])         # 多様なマイナス記号（全角・長音含む）
         (?P<minusnum>\d+)             # 数字（1回以上）
     )
+'''
+
+_Q_SPLIT_PATTERN = r'''
+    (?<!\s)
+    (?=[1-4]Q)
+'''
+
+_DAY_PATTERN = r'''
+    (?<![.,+\-△▲0-9０-９])
+    ((?:0?[1-9]|[12][0-9]|3[01])      # ← 日付の数字
+    [ \u3000]*日)                     # ← 日までキャプチャ
+    (?=[ \u3000（(])                  # ← 日の直後がスペースやカッコのときだけヒット！
 '''
 
 # 事前コンパイルパターンたち（お守り装備コポォ）
@@ -214,6 +218,7 @@ _RE_DOW = re.compile(_DAY_OF_WEEK_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_TIME = re.compile(_TIME_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_SIGNED_NUM = re.compile(_SIGNED_NUMBER_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_REPLACE_LIST = re.compile('|'.join(map(re.escape, replace_list)), flags=re.VERBOSE | re.IGNORECASE)
+_RE_Q_SPLIT = re.compile(_Q_SPLIT_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_MULTIPLE_PERIODS = re.compile(r'。+')
 _RE_SYMBOLS = re.compile(r'[.。,、]{2,}')
 _RE_HEAD_REP = re.compile(r'^（代表）')
@@ -282,10 +287,14 @@ def _replace_year_sequence_with_token(text, min_years=3):
     # そして残った連続年列（最低 min_years 個）を対象に <YEAR> に置換
     # 連続した年だけ抽出（4桁ごとに分割できるように）
     year_seq_pattern = re.compile(rf'(.+?)((?:{year_pattern}){{{min_years},}})')
+    year_seq_pattern = re.compile(
+        rf'(?P<before>.+?)'
+        rf'(?P<years>(?:{year_pattern}){{{min_years},}})'
+        )
 
     def replacer(match):
-        before = match.group(1)
-        chunk = match.group(2)
+        before = match.group('before')
+        chunk = match.group('years')
         years = [chunk[i:i+4] for i in range(0, len(chunk), 4)]
         return before + ' ' + ' '.join(['<YEAR>'] * len(years))
 
@@ -309,30 +318,17 @@ def _combine_number_and_unit(text):
     
     return _COMBINE_UNIT_RE.sub(unit_replacer, text)
 
-# 記号レンジの結合
-def _normalize_range(text):
-    def range_replacer(m):
-        for test in _RE_RANGE_WITH_UNIT.finditer(text):
-            print("Matched:", test.group(0))
-        sign = "+" if m.group("sign") in "＋+" else "-"
-        return f"{sign}_{m.group('start')}-{m.group('end')}_{m.group('unit')}"
-    return _RE_RANGE_WITH_UNIT.sub(range_replacer, text)
-
 # 全角英数を半角英数に
 def _convert_zenkaku_alnum_to_hankaku(text):
     return text.translate(_ZEN2HAN_TABLE)
 
 # +-と数値を_でつなげる
 def _normalize_signed_number(text):
-    
-    # 先にrangeのほうを
-    text = _normalize_range(text)
-    
     def signed_replacer(match):
         if match.group("plus"):
-            return f"+_{match.group('plusnum')}"
+            return f"+{match.group('plusnum')}"
         elif match.group("minus"):
-            return f"-_{match.group('minusnum')}"
+            return f"-{match.group('minusnum')}"
         return match.group(0)
     return _RE_SIGNED_NUM.sub(signed_replacer, text)
 
@@ -393,6 +389,9 @@ def clean_text(text):
     
     # +-と数値を結合
     text = _normalize_signed_number(text)
+    
+    # 1~4Qの前のスペースを
+    text = _RE_Q_SPLIT.sub(' ', text)
 
     # 連続するハイフン（ーまたは-）を1つにする
     #text = _RE_HYPHEN.sub('―', text)

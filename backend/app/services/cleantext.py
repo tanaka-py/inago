@@ -10,30 +10,24 @@ replace_list_path = os.path.join(os.path.dirname(__file__), '../data/summarize_r
 replace_list_df = pd.read_csv(replace_list_path, header=None)
 replace_list = replace_list_df.iloc[:,0].to_list()
 
-# PATTERNS_HEADER: List[Tuple[str, str]] = [
-#         (r'https?://[a-zA-Z0-9.-]+\.(?:com|jp|net|org|co\.jp|biz|info|gov|edu|io|ai)(?:/[A-Za-z/]*)?(?=[^A-Za-z/]|$)', 'url'),  # URLを適切に切る
-#         (r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}', 'email'),  # メールアドレス
-#         (r'(TEL|ＴＥＬ|T E L|電話番号|電話|電 話)', 'phone_header'),  # 電話ヘッダ
-#         (r'(\（?[\d０-９]{2,5}\）?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}|\bTEL\b[\s\-−－]?\(?[\d０-９]{2,5}\)?[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4}[\s\-−－]?[0-9０-９]{1,4})', 'phone_number'),  # 電話番号
-#         (r'(プライム市場、福証)', '福証')  # 福証ヘッダ
-#     ]
-
 _PATTERNS_HEADER: List[Tuple[str, str]] = [
-        (r'(お知らせの一部訂正について)', 'title0'),  # お知らせ
+        (r'(お知らせ(?:」)?(?:の一部変更について|の一部訂正について)?)', 'title0-a'),  # お知らせ
+        (r'(ついてのお知らせ)', 'title1-a'),  # ついて
         (r'(ついて)', 'title1'),  # ついて
         (r'(お知らせ)', 'title2'),  # お知らせ
         (r'(OVERVIEW)', 'title3'), # OVERVIEW
         (r'(業績サマリー Point)', 'title4'), # 業績サマリー Point
         (r'(百万円未満切捨て)', 'title5'), # 百万円未満切捨て
+        (r'(証券コード(?:\:\s?|[ \u3000])[0-9]{4})', 'title6'), # 証券コード
     ]
 
 _PATTERNS_FOTTER: List[Tuple[str, str]] = [
     (r'■本件に関するお問い合わせ先', 'fotter1'),
-    (r'【本件に関する問合せ】', 'fotter2'),
-    (r'本件に関するお問合せ', 'fotter3'),
+    (r'(?:【)?本件に関する(?:お)?問合せ(?:】)?', 'fotter2'),
     (r'お問い合わせ', 'fotter4'),
     (r'本資料に関するお問合せ先', 'fotter5')
 ]
+
 
 _PHONE_PATTERN = r'''
     (?<![.,+\-△▲\d])  # ← 記号と数字の直前を除外！
@@ -53,9 +47,9 @@ _DATE_PATTERN = r'''
         (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月[ \u3000]?
             (?:0?[1-9]|[12][0-9]|3[01])[ \u3000]?日 |
-        (?:19[0-9]{2}|20[0-3]\d|2040)[/-]
-            (?:1[0-2]|0?[1-9])[/-]
-            (?:0?[1-9]|[12][0-9]|3[01]) |
+        (?:19[0-9]{2}|20[0-3]\d|2040)[\/\-\.]
+            (?:1[0-2]|0?[1-9])[\/\-\.]
+            (?:3[01]|[12][0-9]|0?[1-9]) |
         (?:1[0-2]|0?[1-9])[ \u3000]?月[ \u3000]?
             (?:0?[1-9]|[12][0-9]|3[01])[ \u3000]?日 |
         (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
@@ -71,10 +65,10 @@ _DATE_PATTERN = r'''
 _FISCAL_PATTERN = r'''
     (?<![.,+\-△▲])
     (?:
-        (?:19[0-9]{2}|20[0-3]\d|2040)/(?:1[0-2]|0?[1-9])期(?:\s*(?:[1-4]Q))? |
-        (?:[0-9０-９]{2})/(?:1[0-2]|0?[1-9])期(?:\s*(?:[1-4]Q))? |
+        (?:19[0-9]{2}|20[0-3]\d|2040)/(?:1[0-2]|0?[1-9])期 |
+        (?:[0-9]{2})/(?:1[0-2]|0?[1-9])期 |
         (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?(?:1[0-2]|0?[1-9])[ \u3000]?月期 |
-        (?:[0-9０-９]{2})[ \u3000]?年[ \u3000]?(?:1[0-2]|0?[1-9])[ \u3000]?月期
+        (?:[0-9]{2})[ \u3000]?年[ \u3000]?(?:1[0-2]|0?[1-9])[ \u3000]?月期
     )
 '''
 
@@ -82,19 +76,20 @@ _PERIOD_PATTERN = r'''
     (?<![.,+\-△▲])
     (?:
         (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
-            (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜][ \u3000]?
+            (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜~][ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月(?!\s*\d{1,2}\s*日) |
 
         (?:19[0-9]{2}|20[0-3]\d|2040)[/／－][ \u3000]?
-            (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜][ \u3000]?
+            (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜~][ \u3000]?
             (?:1[0-2]|0?[1-9])(?!\s*\d{1,2}\s*日) |
 
-        (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜][ \u3000]?
+        (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜~][ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月(?!\s*\d{1,2}\s*日) |
 
         (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
-            (?:1[0-2]|0?[1-9])[ \u3000]?月[ \u3000]?[-～〜][ \u3000]?
-            (?:1[0-2]|0?[1-9])[ \u3000]?月(?!\s*\d{1,2}\s*日)
+            (?:1[0-2]|0?[1-9])[ \u3000]?月[ \u3000]?[-～〜~][ \u3000]?
+            (?:1[0-2]|0?[1-9])[ \u3000]?月(?!\s*\d{1,2}\s*日) |
+        (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?[-～〜~][ \u3000]?(?:19[0-9]{2}|20[0-3]\d|2040)
     )
 '''
 
@@ -147,6 +142,14 @@ _URL_PATTERN = r"""
     [\w\-._~:/?#\[\]@!$&'()*+,;=%]+
 """
 
+_MAIL_PATTERN = r"""
+    (?<![a-zA-Z0-9])            # ← 前がアルファベットor数字じゃないこと（境界）
+    [a-zA-Z0-9._%+-]+           # ← ユーザー名部分
+    @
+    [a-zA-Z0-9.-]+              # ← ドメイン名部分
+    \.[a-zA-Z]{2,}              # ← TLD（com, co.jp など）
+"""
+
 _DAY_OF_WEEK_PATTERN = r'[（(](月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日|月|火|水|木|金|土|日)[）)]'
 
 _TIME_PATTERN = r'''
@@ -155,14 +158,16 @@ _TIME_PATTERN = r'''
         \s*                       # スペース（0回以上）
         ([0-9]|1[0-9]|2[0-4])     # 時（0〜24）
         \s*時\s*                  # 「時」の前後にスペース許容
-        ([0-9]|[1-5][0-9]|60)     # 分（0〜60）
-        \s*分                     # 「分」の後にもスペース許容
+        (
+            ([0-9]|[1-5][0-9]|60)     # 分（0〜60）
+            \s*分                     # 「分」の後にもスペース許容
+        )?
     )
 '''
 
 # 単位リスト（あとで追加し放題ｗｗｗ）
 _UNITS = ["百万円", "千万円", "億円", "百万", "万円", "千円", "万人",
-          "円", "株", "%", "％", "件", "号", "倍", "社", "人" "ポイント", "pt"]
+          "円", "株", "%", "％", "件", "号", "倍", "社", "人" "ポイント", "pt", 'pp']
 _UNITS_NONE = [
     # 株
     "株主", "株式", "株当たり", "株数", "株価", "株元", "株券",
@@ -191,7 +196,7 @@ _SIGNED_NUMBER_PATTERN = r'''
 '''
 
 _Q_SPLIT_PATTERN = r'''
-    (?<!\s)
+    (?<=[0-9])
     (?=[1-4]Q)
 '''
 
@@ -202,10 +207,52 @@ _DAY_PATTERN = r'''
     (?=[ \u3000（(])                  # ← 日の直後がスペースやカッコのときだけヒット！
 '''
 
+_EXT_MAP = {
+        '末日': 'EXT',
+        '末': 'EXT',
+        '下期': 'TERM_EXT',
+        '上期': 'TERM_EXT',
+        '1Q': 'QUARTER1_EXT',
+        '2Q': 'QUARTER2_EXT',
+        '3Q': 'QUARTER3_EXT',
+        '4Q': 'QUARTER4_EXT',
+        '第1四半期': 'QUARTER1_EXT',
+        '第2四半期': 'QUARTER2_EXT',
+        '第3四半期': 'QUARTER3_EXT',
+        '第4四半期': 'QUARTER4_EXT',
+    }
+_EXT_KEYS = '|'.join(re.escape(key) for key in _EXT_MAP.keys())
+_EXT_TAG = rf'''
+    <(?P<tag>(ESTIMATE|FISCAL|PERIOD|TERM|DATE|YEAR|MONTH|DAY))>
+    (?P<ext>({_EXT_KEYS}))
+'''
+
+_PARAGRAPH_PATTEN = r'''
+    (?<=\d)    # 前に数字
+    \.         # ピリオド本体
+    (?=        # 以下のどれかが続く場合
+        (?:               # 年
+            (?:[0-9]{2}|19[0-9]{2}|20[0-3][0-9]|2040)[ \u3000]*
+            年
+        )
+        |
+        (?:               # 月
+            (?:1[0-2]|0?[1-9])[ \u3000]*
+            月
+        )
+        |
+        (?:               # 日
+            (?:3[01]|[12][0-9]|0?[1-9])[ \u3000]*
+            日
+        )
+    )
+'''
+
 # 事前コンパイルパターンたち（お守り装備コポォ）
 _RE_REMOVE_CHARS = re.compile(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+')
 _RE_URL = re.compile(_URL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_PHONE = re.compile(_PHONE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_MAIL = re.compile(_MAIL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_ESTIMATE = re.compile(_ESTIMATE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_FISCAL = re.compile(_FISCAL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_TERM = re.compile(_TERM_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
@@ -219,13 +266,16 @@ _RE_TIME = re.compile(_TIME_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_SIGNED_NUM = re.compile(_SIGNED_NUMBER_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_REPLACE_LIST = re.compile('|'.join(map(re.escape, replace_list)), flags=re.VERBOSE | re.IGNORECASE)
 _RE_Q_SPLIT = re.compile(_Q_SPLIT_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_TAG = re.compile(_EXT_TAG, flags=re.VERBOSE | re.IGNORECASE)
 _RE_MULTIPLE_PERIODS = re.compile(r'。+')
+_RE_UL = re.compile(r"[\ue000-\uf8ff]")
 _RE_SYMBOLS = re.compile(r'[.。,、]{2,}')
 _RE_HEAD_REP = re.compile(r'^（代表）')
 _RE_HEAD_NOTICE = re.compile(r'^）のお知らせ')
 _RE_HEAD_NOTICE2 = re.compile(r'^のお知らせ')
 _RE_HEAD_CLOSING = re.compile(r'^[）\)]')
 _COMBINE_UNIT_RE = re.compile(rf'(\d+(?:[,.]\d+)?)[\s\u3000]*({_UNIT_PATTERN})')
+_RE_PARAGRAPH = re.compile(_PARAGRAPH_PATTEN, flags=re.VERBOSE | re.IGNORECASE)
 
 _HEADER_PATTERN = re.compile('|'.join(pattern[0] for pattern in _PATTERNS_HEADER))
 
@@ -344,12 +394,18 @@ def clean_text(text):
 
     # フッター部分を削除
     text = _clean_footer(text)
+    
+    # いったん段落日付って感じのを置き換えておく
+    text = _RE_PARAGRAPH.sub(r'.#break#', text)
 
     # URLを<URL>タグに置き換える
     text = _RE_URL.sub('<URL>', text)
 
     # 電話番号を<PHONE>タグに置き換える
     text = _RE_PHONE.sub('<PHONE>', text)
+    
+    # メールアドレスを<MAIL>タグの置き換える
+    text = _RE_MAIL.sub('<MAIL>', text)
     
     # 見込みを<ESTIMATE>タグに置き換える
     text = _RE_ESTIMATE.sub('<ESTIMATE>', text)
@@ -361,7 +417,7 @@ def clean_text(text):
     text = _RE_FISCAL.sub('<FISCAL>', text)
 
     # 期間を<PERIOD>タグに置き換える
-    text = _RE_TERM.sub('<PERIOD>', text)
+    text = _RE_TERM.sub('<TERM>', text)
 
     # 年度期間を<TERM>タグに置き換える
     text = _RE_PERIOD.sub('<PERIOD>', text)
@@ -379,7 +435,7 @@ def clean_text(text):
     text = _RE_DAY.sub('<DAY>', text)
 
     # 曜日を<DOW>タグに置き換える
-    text = _RE_DOW.sub('<DOW>', text)
+    text = _RE_DOW.sub('', text)
     
     # 時間を<TIME>タグに置き換える
     text = _RE_TIME.sub('<TIME>', text)
@@ -390,22 +446,29 @@ def clean_text(text):
     # +-と数値を結合
     text = _normalize_signed_number(text)
     
+    # 末日関連のタグ修正
+    text = _RE_TAG.sub(lambda match: rf'<{match.group('tag')}_{_EXT_MAP.get(match.group('ext'), 'DEFAULT')}>', text)
+    
     # 1~4Qの前のスペースを
     text = _RE_Q_SPLIT.sub(' ', text)
 
     # 連続するハイフン（ーまたは-）を1つにする
     #text = _RE_HYPHEN.sub('―', text)
+    
+    # BREAK を戻す
+    text = text.replace('.#break#', '.')
 
     # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
     text = _RE_REPLACE_LIST.sub('。', text)
 
     # 最終クリーン
+    text = _RE_UL.sub('・', text)
     text = _RE_MULTIPLE_PERIODS.sub('。', text)
     text = _RE_SYMBOLS.sub('', text)
     text = _RE_HEAD_REP.sub('', text)
-    text = _RE_HEAD_NOTICE.sub('', text)
-    text = _RE_HEAD_NOTICE2.sub('', text)
-    text = _RE_HEAD_CLOSING.sub('', text)
+    # text = _RE_HEAD_NOTICE.sub('', text)
+    # text = _RE_HEAD_NOTICE2.sub('', text)
+    # text = _RE_HEAD_CLOSING.sub('', text)
     text = text.strip()
 
     return text

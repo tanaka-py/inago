@@ -25,10 +25,48 @@ const getSummarizeList = async () => {
   loadingStore.startLoading()
 
   try {
-    let summarize_res = await axios.post('/disclosure/summarizelist')
+    summarize_list.value = []
 
-    summarize_list.value = summarize_res.data
-    workdata_list.value = []
+    const response = await fetch('/disclosure/summarizelist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({"name": 'test'})  // 空でいいから送るのがミソｗｗｗ
+    })
+    loadingStore.stopLoading()
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      let lines = buffer.split('\n')
+      buffer = lines.pop() // 最後の不完全な行は残す
+
+      for (const line of lines) {
+        if (line.trim()) {
+          const item = JSON.parse(line)
+          summarize_list.value.push(item)  // ﾄﾞﾝﾄﾞﾝ追記ｗｗｗ
+        }
+      }
+    }
+
+    // ここで、残ったバッファを処理
+    if (buffer.trim()) {
+      const lastItem = JSON.parse(buffer)
+      summarize_list.value.push(lastItem)  // 最後の一行も追加！
+    }
+
+    alert('finish')
+    //let summarize_res = await axios.post('/disclosure/summarizelist')
+
+    //summarize_list.value = summarize_res.data
+    //workdata_list.value = []
   } catch (error) {
     alert(`call_error! ★summarize=[${error}]`)
   } finally {
@@ -184,7 +222,7 @@ const getDiffHtmlForOriginal = (arg1, arg2) => {
     } else if (op === -1) {
       result += `<span style="background:#ffdddd;">${escaped}</span>`;
     } else if (op === 1) {
-      result += '&nbsp;'.repeat(data.length); // 空白で位置合わせ
+      result += `<span style="visibility:hidden;">${escaped}</span>`;
     }
   });
 
@@ -206,7 +244,7 @@ const getDiffHtmlForModified = (arg1, arg2) => {
     } else if (op === 1) {
       result += `<span style="background:#add8e6;">${escaped}</span>`;
     } else if (op === -1) {
-      result += '&nbsp;'.repeat(data.length); // 空白で位置合わせ
+      result += `<span style="visibility:hidden;">${escaped}</span>`;
     }
   });
 

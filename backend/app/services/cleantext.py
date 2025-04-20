@@ -44,18 +44,25 @@ _PHONE_PATTERN = r'''
 _DATE_PATTERN = r'''
     (?<![.,+\-△▲])
     (?:
-        (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
+        # 元号（令和・平成など）
+        (?:令和|平成|昭和|大正|明治)[ \u3000]*[0-9]{1,2}[ \u3000]*年[ \u3000]*
+            (?:1[0-2]|0?[1-9])[ \u3000]*月[ \u3000]*
+            (?:3[01]|[12][0-9]|0?[1-9])[ \u3000]*日 |
+        (?:令和|平成|昭和|大正|明治)[ \u3000]*[0-9]{1,2}[ \u3000]*年[ \u3000]*
+            (?:1[0-2]|0?[1-9])[ \u3000]*月 |
+
+        # 西暦（1800〜2040）
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月[ \u3000]?
             (?:0?[1-9]|[12][0-9]|3[01])[ \u3000]?日 |
-        (?:19[0-9]{2}|20[0-3]\d|2040)[\/\-\.]
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[\/\-\.]
             (?:1[0-2]|0?[1-9])[\/\-\.]
             (?:3[01]|[12][0-9]|0?[1-9]) |
         (?:1[0-2]|0?[1-9])[ \u3000]?月[ \u3000]?
             (?:0?[1-9]|[12][0-9]|3[01])[ \u3000]?日 |
-        (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月 |
-        (?:19[0-9]{2}|20[0-3]\d|2040)[/-／－]
-            (?:1[0-2]|0?[1-9]) |
+        (?<!\d)(?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[/-／－](?:1[0-2]|0?[1-9])(?!\d) |
         (?:[0-9０-９]{2})[ \u3000]?年[ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月 |
         (?:[0-9]{2})[ \u3000]*年[ \u3000]*(?:1[0-2]|0?[1-9])(?=[ \u3000月.,)）\n]|$)
@@ -65,73 +72,88 @@ _DATE_PATTERN = r'''
 _FISCAL_PATTERN = r'''
     (?<![.,+\-△▲])
     (?:
-        (?:19[0-9]{2}|20[0-3]\d|2040)/(?:1[0-2]|0?[1-9])期 |
+        (?:令和|平成|昭和|大正|明治)[ \u3000]?[0-9]{1,2}[ \u3000]?年[ \u3000]?
+            (?:1[0-2]|0?[1-9])[ \u3000]?月期 |
+        
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)/(?:1[0-2]|0?[1-9])期 |
+        
         (?:[0-9]{2})/(?:1[0-2]|0?[1-9])期 |
-        (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?(?:1[0-2]|0?[1-9])[ \u3000]?月期 |
-        (?:[0-9]{2})[ \u3000]?年[ \u3000]?(?:1[0-2]|0?[1-9])[ \u3000]?月期
+
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
+            (?:1[0-2]|0?[1-9])[ \u3000]?月期 |
+        
+        (?:[0-9]{2})[ \u3000]?年[ \u3000]?
+            (?:1[0-2]|0?[1-9])[ \u3000]?月期 |
+        
+        (?:1[0-2]|0?[1-9])[ \u3000]?月期
     )
 '''
 
-_PERIOD_PATTERN = r'''
+
+_TERM_PATTERN = r'''
     (?<![.,+\-△▲])
     (?:
-        (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
+        # YYYY-YYYY年度
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-2]\d)[\u3000\s\-ー〜～～]?
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-2]\d)
+        年(?:度)? |
+
+        # YYYY年MM～MM月
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜~][ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月(?!\s*\d{1,2}\s*日) |
 
-        (?:19[0-9]{2}|20[0-3]\d|2040)[/／－][ \u3000]?
+        # YYYY/MM～MM
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[/／－][ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜~][ \u3000]?
             (?:1[0-2]|0?[1-9])(?!\s*\d{1,2}\s*日) |
 
+        # MM～MM月
         (?:1[0-2]|0?[1-9])[ \u3000]?[-～〜~][ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月(?!\s*\d{1,2}\s*日) |
 
-        (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
+        # YYYY年MM月～MM月
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?年[ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月[ \u3000]?[-～〜~][ \u3000]?
             (?:1[0-2]|0?[1-9])[ \u3000]?月(?!\s*\d{1,2}\s*日) |
-        (?:19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?[-～〜~][ \u3000]?(?:19[0-9]{2}|20[0-3]\d|2040)
+
+        # YYYY～YYYY
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)[ \u3000]?[-～〜~][ \u3000]?
+            (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)
     )
-'''
-
-_MONTH_PATTERN = r'''
-    (?<![.,+\-△▲0-9０-９])
-    (?:1[0-2]|0?[1-9])
-    [ \u3000]*
-    月
-    (?![日0-9０-９])
-'''
-
-_YEAR_PATTERN = r'''
-    (?<![.,+\-△▲0-9０-９])
-    (?:19[0-9]{2}|20[0-3]\d|2040)
-    年(?:度)?
-    (?![月期0-9０-９])
-'''
-
-_DAY_PATTERN = r'''
-    (?<![.,+\-△▲0-9０-９])
-    ((?:0?[1-9]|[12][0-9]|3[01])      # ← 日付の数字
-    [ \u3000]*日)                     # ← 日までキャプチャ
-    (?=[ \u3000（(])                  # ← 日の直後がスペースやカッコのときだけヒット！
 '''
 
 _ESTIMATE_PATTERN = r'''
     (?<![.,+\-△▲])
-    (?:19[0-9]{2}|20[0-3]\d|2040)
+    (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)
     (?:年(?:度)?)?
     [\(\（]\s*
     (?:見込み|見通し|予測)
     \s*[\)\）]
 '''
 
-_TERM_PATTERN = r'''
+_YEAR_PATTERN = r'''
+    (?<![.,+\-△▲0-9])
     (?:
-        (?<![.,+\-△▲])
-        (?:19[0-9]{2}|20[0-2]\d)
-        [\u3000\s\-ー〜～～]?
-        (?:19[0-9]{2}|20[0-2]\d)
-        年(?:度)?
+        (?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)年(?:度)? |
+        FY(?:18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)|FY(?:[0-9]{2})
     )
+    (?![月期0-9０-９])
+'''
+
+_MONTH_PATTERN = r'''
+    (?<![.,+\-△▲0-9])
+    (?:1[0-2]|0?[1-9])
+    [ \u3000]*
+    月
+    (?![日0-9０-９])
+'''
+
+_DAY_PATTERN = r'''
+    (?<![.,+\-△▲0-9])
+    ((?:0?[1-9]|[12][0-9]|3[01])      # ← 日付の数字
+    [ \u3000]*日)                     # ← 日までキャプチャ
+    (?=[ \u3000（(])                  # ← 日の直後がスペースやカッコのときだけヒット！
 '''
 
 _URL_PATTERN = r"""
@@ -150,24 +172,9 @@ _MAIL_PATTERN = r"""
     \.[a-zA-Z]{2,}              # ← TLD（com, co.jp など）
 """
 
-_DAY_OF_WEEK_PATTERN = r'[（(](月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日|月|火|水|木|金|土|日)[）)]'
-
-_TIME_PATTERN = r'''
-    (?:
-        (午前|午後)?              # 午前 or 午後（省略可）
-        \s*                       # スペース（0回以上）
-        ([0-9]|1[0-9]|2[0-4])     # 時（0〜24）
-        \s*時\s*                  # 「時」の前後にスペース許容
-        (
-            ([0-9]|[1-5][0-9]|60)     # 分（0〜60）
-            \s*分                     # 「分」の後にもスペース許容
-        )?
-    )
-'''
-
 # 単位リスト（あとで追加し放題ｗｗｗ）
 _UNITS = ["百万円", "千万円", "億円", "百万", "万円", "千円", "万人",
-          "円", "株", "%", "％", "件", "号", "倍", "社", "人" "ポイント", "pt", 'pp']
+          "円", "株", "%", "％", "㎡", "件", "号", "倍", "社", "人" "ポイント", "pt", 'pp']
 _UNITS_NONE = [
     # 株
     "株主", "株式", "株当たり", "株数", "株価", "株元", "株券",
@@ -200,14 +207,8 @@ _Q_SPLIT_PATTERN = r'''
     (?=[1-4]Q)
 '''
 
-_DAY_PATTERN = r'''
-    (?<![.,+\-△▲0-9０-９])
-    ((?:0?[1-9]|[12][0-9]|3[01])      # ← 日付の数字
-    [ \u3000]*日)                     # ← 日までキャプチャ
-    (?=[ \u3000（(])                  # ← 日の直後がスペースやカッコのときだけヒット！
-'''
-
 _EXT_MAP = {
+        'の末日': 'EXT',
         '末日': 'EXT',
         '末': 'EXT',
         '下期': 'TERM_EXT',
@@ -220,6 +221,8 @@ _EXT_MAP = {
         '第2四半期': 'QUARTER2_EXT',
         '第3四半期': 'QUARTER3_EXT',
         '第4四半期': 'QUARTER4_EXT',
+        '中間期': 'HALF_EXT',
+        '通期': 'ALL_EXT'
     }
 _EXT_KEYS = '|'.join(re.escape(key) for key in _EXT_MAP.keys())
 _EXT_TAG = rf'''
@@ -248,6 +251,40 @@ _PARAGRAPH_PATTEN = r'''
     )
 '''
 
+_DUPLICATE_PATTERN = r'''
+    (?P<dup>                                         # ← dupとして共通にする！
+        (年|月|日)(?:[ \u3000]*\2)+                  # 「年年」「月月」「日日」
+        |
+        [。]{2,}                                     # 「。。」以上の連続ピリオド
+    )
+'''
+
+_DELETE_PATTERN = r'''
+    (                           # いずれかにマッチしたら削除対象だお
+        [（(](?:月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日|月|火|水|木|金|土|日)[）)]  # 曜日（括弧付き）
+        |
+        (?:
+            (?:午前|午後)?             # 午前/午後（省略可）
+            \s*
+            (?:[0-9]|1[0-9]|2[0-4])    # 時
+            \s*時\s*
+            (?:
+                (?:[0-9]|[1-5][0-9]|60)\s*分  # 分（任意）
+            )?
+        )
+        |
+        [.。,、]{2,}                 # 句読点が2個以上連続
+        |
+        ^（代表）                   # 行頭の（代表）
+    )
+'''
+_DELSPACE_LIST = ['の末日', '末日', '末']
+_DELSPACE_PATTERN = rf'''
+    (?<=18[0-9]{2}|19[0-9]{2}|20[0-3]\d|2040)\s+(?=年)
+    |
+    [ \u3000]+(?=({'|'.join(_DELSPACE_LIST)}))
+'''
+
 # 事前コンパイルパターンたち（お守り装備コポォ）
 _RE_REMOVE_CHARS = re.compile(r'[\u2000-\u200F\uFE0F\u2028\u2029\u2060]+')
 _RE_URL = re.compile(_URL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
@@ -256,31 +293,25 @@ _RE_MAIL = re.compile(_MAIL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_ESTIMATE = re.compile(_ESTIMATE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_FISCAL = re.compile(_FISCAL_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_TERM = re.compile(_TERM_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
-_RE_PERIOD = re.compile(_PERIOD_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_DATE = re.compile(_DATE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_YEAR = re.compile(_YEAR_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_MONTH = re.compile(_MONTH_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_DAY = re.compile(_DAY_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
-_RE_DOW = re.compile(_DAY_OF_WEEK_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
-_RE_TIME = re.compile(_TIME_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_DELETE = re.compile(_DELETE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
+_RE_DELSPACE = re.compile(_DELSPACE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_SIGNED_NUM = re.compile(_SIGNED_NUMBER_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_REPLACE_LIST = re.compile('|'.join(map(re.escape, replace_list)), flags=re.VERBOSE | re.IGNORECASE)
 _RE_Q_SPLIT = re.compile(_Q_SPLIT_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_TAG = re.compile(_EXT_TAG, flags=re.VERBOSE | re.IGNORECASE)
-_RE_MULTIPLE_PERIODS = re.compile(r'。+')
+_RE_DUPLICATE = re.compile(_DUPLICATE_PATTERN, flags=re.VERBOSE | re.IGNORECASE)
 _RE_UL = re.compile(r"[\ue000-\uf8ff]")
-_RE_SYMBOLS = re.compile(r'[.。,、]{2,}')
-_RE_HEAD_REP = re.compile(r'^（代表）')
-_RE_HEAD_NOTICE = re.compile(r'^）のお知らせ')
-_RE_HEAD_NOTICE2 = re.compile(r'^のお知らせ')
-_RE_HEAD_CLOSING = re.compile(r'^[）\)]')
 _COMBINE_UNIT_RE = re.compile(rf'(\d+(?:[,.]\d+)?)[\s\u3000]*({_UNIT_PATTERN})')
 _RE_PARAGRAPH = re.compile(_PARAGRAPH_PATTEN, flags=re.VERBOSE | re.IGNORECASE)
 
 _HEADER_PATTERN = re.compile('|'.join(pattern[0] for pattern in _PATTERNS_HEADER))
 
 _FOOTER_PATTERN_1 = re.compile(r'以[\s　]*上')
-_FOTTER_PATTERN_2 = re.compile('|'.join(map(re.escape, [p[0] for p in _PATTERNS_FOTTER])))
+_FOTTER_PATTERN_2 = re.compile('|'.join([p[0] for p in _PATTERNS_FOTTER]))
 
 _ZENKAKU = '０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ'
 _HANKAKU = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
@@ -395,8 +426,17 @@ def clean_text(text):
     # フッター部分を削除
     text = _clean_footer(text)
     
+    # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
+    text = _RE_REPLACE_LIST.sub('。', text)
+    
     # いったん段落日付って感じのを置き換えておく
     text = _RE_PARAGRAPH.sub(r'.#break#', text)
+    
+    # 年月日の連続を正常化
+    text = _RE_DUPLICATE.sub(r'\g<dup>', text)
+    
+    # 登録リストの前スペース削り
+    text = _RE_DELSPACE.sub('', text)
 
     # URLを<URL>タグに置き換える
     text = _RE_URL.sub('<URL>', text)
@@ -419,9 +459,6 @@ def clean_text(text):
     # 期間を<PERIOD>タグに置き換える
     text = _RE_TERM.sub('<TERM>', text)
 
-    # 年度期間を<TERM>タグに置き換える
-    text = _RE_PERIOD.sub('<PERIOD>', text)
-
     # 日付を<DATE>タグに置き換える
     text = _RE_DATE.sub('<DATE>', text)
 
@@ -434,12 +471,6 @@ def clean_text(text):
     # 日を<DAY>タグに置き換える
     text = _RE_DAY.sub('<DAY>', text)
 
-    # 曜日を<DOW>タグに置き換える
-    text = _RE_DOW.sub('', text)
-    
-    # 時間を<TIME>タグに置き換える
-    text = _RE_TIME.sub('<TIME>', text)
-
     # 数値と単位を結合
     text = _combine_number_and_unit(text)
     
@@ -451,24 +482,13 @@ def clean_text(text):
     
     # 1~4Qの前のスペースを
     text = _RE_Q_SPLIT.sub(' ', text)
-
-    # 連続するハイフン（ーまたは-）を1つにする
-    #text = _RE_HYPHEN.sub('―', text)
     
     # BREAK を戻す
     text = text.replace('.#break#', '.')
 
-    # summarize_replace.csvに登録されてるものを。に置き換える(区切り文字として扱う)
-    text = _RE_REPLACE_LIST.sub('。', text)
-
     # 最終クリーン
     text = _RE_UL.sub('・', text)
-    text = _RE_MULTIPLE_PERIODS.sub('。', text)
-    text = _RE_SYMBOLS.sub('', text)
-    text = _RE_HEAD_REP.sub('', text)
-    # text = _RE_HEAD_NOTICE.sub('', text)
-    # text = _RE_HEAD_NOTICE2.sub('', text)
-    # text = _RE_HEAD_CLOSING.sub('', text)
+    text = _RE_DELETE.sub('', text)
     text = text.strip()
 
     return text
@@ -476,5 +496,5 @@ def clean_text(text):
 
 #### ↓　開示内にて表とだったであろうグループを特定 #############################################
 def is_exclude_calendar(line):
-    return re.search(r'\b(?:1[0-2]|[1-9])(?:\s+(?:1[0-2]|[1-9])){5,}\b', line)
+    return re.search(r'\b1 2 3 4 5 6 7 8 9 10 11 12\b', line)
 

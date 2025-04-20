@@ -17,5 +17,10 @@ export default defineConfig({
   },
   build: {
     sourcemap: true  // ソースマップを生成
+  },
+  server: {
+    proxy: {
+      '/disclosure': 'http://localhost:8000'
+    }
   }
 })

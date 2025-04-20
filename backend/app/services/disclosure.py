@@ -379,23 +379,24 @@ async def get_irbank_list(
         return target_page, None
     
     # 証券コードがないものと東証以外は除外
-    df_filters = df[
-        df['Code'].str.strip().notna() &
-        (~df['Name'].str.contains('|'.join(exclusion_company), case=False, na=False)) &
-        (~df['Title'].str.contains('|'.join(exclusion_title), case=False, na=False)) &
-        (~df['Name'].str.isdigit()) 
-        ]
+    df_filters = df[df['Name'].isin(['ファンペップ', 'メディカルネット'])]
+    # df_filters = df[
+    #     df['Code'].str.strip().notna() &
+    #     (~df['Name'].str.contains('|'.join(exclusion_company), case=False, na=False)) &
+    #     (~df['Title'].str.contains('|'.join(exclusion_title), case=False, na=False)) &
+    #     (~df['Name'].str.isdigit()) 
+    #     ]
     
     # PDFの中身を要約してセット
     df_filters[['Link', 'Title']] = df_filters['Title'].apply(lambda x: pd.Series(extract_detailurl(x)))
     # 詳細ページから日付とpdfリンクを取得
-    df_filters[['Date', 'Link']] = df_filters['Link'].apply(lambda x: pd.Series(get_detail_data(x))) 
+    df_filters[['Date', 'Url']] = df_filters['Link'].apply(lambda x: pd.Series(get_detail_data(x))) 
     # 並列で処理を行うように修正 applyではなくmapとなる
-    urls = df_filters['Link'].to_list()
+    urls = df_filters['Url'].to_list()
     
     # ThreadPoolExecutorを使用した並列処理
     summaries = process_pdf.in_parallel(urls, max_workers=pdf_summaries_max_workers)
-    df_filters['Link'] = df_filters['Link'].map(lambda x: re.sub(r"\s+", " ", str(summaries.get(x, ""))).strip())
+    df_filters['Link'] = df_filters['Url'].map(lambda x: re.sub(r"\s+", " ", str(summaries.get(x, ""))).strip())
     
     return target_page, df_filters
 

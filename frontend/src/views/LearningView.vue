@@ -41,30 +41,22 @@ const callLearning = async (work_load) => {
 // Tdnet開示アップロード
 const callTdnetUpload = async () => {
 
-  alert('今禁止ね')
-  return
+  loadingStore.startLoading()
 
-  // if (!selectedDate.value) {
-  //   alert('日付いれいや')
-  //   return
-  // }
+  nextTick(async () => {
+    try {
+      let params = {
+        date: selectedDate.value.replace(/-/g, ''),
+      }
+      let tdnet_res = await axios.post('/disclosure/upload', params)
 
-  // loadingStore.startLoading()
-
-  // nextTick(async () => {
-  //   try {
-  //     let params = {
-  //       date: selectedDate.value.replace(/-/g, ''),
-  //     }
-  //     let tdnet_res = await axios.post('/disclosure/upload', params)
-
-  //     alert(tdnet_res.data.message)
-  //   } catch (error) {
-  //     alert(`call_error! ★tdnet detail=[${error}]`)
-  //   } finally {
-  //     loadingStore.stopLoading()
-  //   }
-  // })
+      alert(tdnet_res.data.message)
+    } catch (error) {
+      alert(`call_error! ★tdnet detail=[${error}]`)
+    } finally {
+      loadingStore.stopLoading()
+    }
+  })
 }
 
 // 学習前作業データ削除

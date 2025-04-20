@@ -16,6 +16,7 @@ warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
 
 # 環境変数から会社リストの保存GCSパスを取得
 gcs_list_csv_path = os.getenv('GCS_LIST_CSV_PATH', '')
+gcs_newlist_csv_path = os.getenv('GCS_LIST_NEW_CSV_PATH', '')
 gcs_work_csv_path = os.getenv('GCS_WORK_CSV_PATH', '')
 
 is_debug = os.getenv('is_debug', 'False').lower() == 'true'
@@ -616,6 +617,8 @@ async def get_work_data_list(
 
 # 開示文章とその要約を取得  デバッグ確認用
 async def get_summarize_list(
+    page,
+    page_size
 ):
     # 現在作業中の対象日を取得
     target_date_path = os.path.join(os.path.dirname(__file__), '../data/next_learndate.txt')
@@ -630,10 +633,13 @@ async def get_summarize_list(
     
     # 取得jsonを
     data_df = pd.DataFrame(data_list)
+    data_df = data_df[page:page+page_size]
+    if data_df.empty:
+        return None
     data_df = data_df[['Link']]
     
     data_df = data_df[~data_df['Link'].apply(is_broken_text)]
-    data_df = data_df[27:28]
+    #data_df = data_df[27:28]
     
     links = data_df['Link'].tolist()
     
@@ -646,7 +652,8 @@ async def get_summarize_list(
 # 一覧から取得した
 async def upload_disclosure_from_list(
     df,
-    is_today = False
+    is_today = False,
+    is_new_list = False
 ):
     # 保存用の日付のみのキー取得
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
@@ -659,7 +666,7 @@ async def upload_disclosure_from_list(
     df = df[df['Date'].notna()]
     
     # 一か月の株価情報を取得
-    if is_today:
+    if is_today or is_new_list:
         # 本日の場合データがないので空で
         df[['Stock', 'N225', 'Growth']] = df.apply(lambda x: pd.Series({'Stock':{}, 'N225':{}, 'Growth':{}}), axis=1)
     else:
@@ -684,6 +691,31 @@ async def upload_disclosure_from_list(
             # 既存データそのままで保存する
             googleapi.upload_list(
                 item_df,
-                f'{gcs_list_csv_path}/{date_key}.json'
+                f'{gcs_newlist_csv_path}/{date_key}.json'
             )
+            
+# errorファイルのアップロード
+async def upload_disclosure_from_error(
+    df
+):
+    # 保存用の日付のみのキー取得
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df['DateKey'] = df['Date'].dt.strftime('%Y-%m-%d')
+    
+    # NaNをNoneに変換
+    df = df.where(pd.notnull(df), None)
+    
+    # 日付がないものはここで省く
+    df = df[df['Date'].notna()]
+    
+    # 日付別にアップロード
+    grouped_dfs = [group for _, group in df.groupby('DateKey')]
+    for item_df in grouped_dfs:
+        date_key = item_df['DateKey'].iloc[0]
+        
+        # 完全上書き
+        googleapi.rewrite_list(
+            item_df,
+            f'{gcs_newlist_csv_path}/{date_key}_error.json'
+        )
     

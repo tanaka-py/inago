@@ -4,6 +4,9 @@ import pandas as pd
 from ..services import disclosure, googleapi, learning, mlp
 from ..schemas.disclosure import LearningItem, StatItem
 from fastapi import APIRouter
+from fastapi import BackgroundTasks, Request
+from fastapi.responses import StreamingResponse
+import json
 
 router = APIRouter()
 
@@ -69,12 +72,20 @@ async def upload_disclosure(item: LearningItem):
             }
     
     if not is_debug:
-        # consleに開示をアップロードする
-        await learning.upload_disclosure_from_list(df)
-            
-        # 全てが完了したら次のリンクをファイルに保存
-        with open(nextlink_path, 'w', encoding='utf-8') as f:
-            f.write(next_link)
+        
+        # error行ないかチェック
+        error_df = df[df['Link'].str.contains('Error', na=False)]
+        
+        if error_df.empty:
+            # consleに開示をアップロードする
+            await learning.upload_disclosure_from_list(df,is_new_list=True)
+                
+            # 全てが完了したら次のリンクをファイルに保存
+            # with open(nextlink_path, 'w', encoding='utf-8') as f:
+            #     f.write(next_link)
+        else:
+            # エラーを確認するための保存
+            await learning.upload_disclosure_from_error(df)
     
     return {
         'message': item.date
@@ -98,9 +109,43 @@ async def learning_disclosure(item: LearningItem):
         }
 
 # 開示とその要約したリストを取得
+# @router.post('/summarizelist')
+# async def confirm_summarize():
+#     return await learning.get_summarize_list()
 @router.post('/summarizelist')
-async def confirm_summarize():
-    return await learning.get_summarize_list()
+async def confirm_summarize(request: Request):
+    # ストリーミングレスポンスを返す
+    async def data_streamer():
+        # ここではすぐにデータを返し始めるよ
+        # 例えば、最初の部分だけ返しながらバックグラウンドタスクが処理を続けるとかｗｗｗ
+        async for item in get_partial_data():  # get_partial_data()は途中データを返す非同期関数
+            yield json.dumps(item) + "\n"
+    
+    return StreamingResponse(data_streamer(), media_type="application/x-ndjson")
+
+# データ分割取得
+async def get_partial_data():
+    # page = 34
+    # page_size = 1  # 1ページあたり5件、ページングのサイズを設定
+    # is_debug = True
+    page = 0
+    page_size = 5  # 1ページあたり5件、ページングのサイズを設定
+    is_debug = False
+    
+    while True:
+        summarize_list = await learning.get_summarize_list(page=page, page_size=page_size)
+        
+        if not summarize_list:  # 取得したデータが空なら終了
+            break
+        
+        for item in summarize_list:
+            yield item
+            
+        if is_debug:
+            break
+
+        page += page_size  # 次のページへ進む
+
 
 # 学習前データリストを取得
 @router.post('/workdatalist')

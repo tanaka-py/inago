@@ -121,8 +121,9 @@ async def get_list(
     
     # PDFの中身を要約してセット
     df_filters[['Link', 'Title']] = df_filters['Title'].apply(lambda x: pd.Series(extract_pdfurl(x)))
+    df_filters['Url'] = df_filters['Link']
     # 並列で処理を行うように修正 applyではなくmapとなる
-    urls = df_filters['Link'].to_list()
+    urls = df_filters['Url'].to_list()
     
     # asyncioを使用した非同期サーバ通信取得処理
     #summaries = await process_pdf.in_parallel_asyncio(urls, max_workers=pdf_summaries_max_workers)
@@ -130,7 +131,7 @@ async def get_list(
     
     # ThreadPoolExecutorを使用した並列処理
     summaries = process_pdf.in_parallel(urls, max_workers=pdf_summaries_max_workers)
-    df_filters['Link'] = df_filters['Link'].map(lambda x: re.sub(r"\s+", " ", str(summaries.get(x, ""))).strip())
+    df_filters['Link'] = df_filters['Url'].map(lambda x: re.sub(r"\s+", " ", str(summaries.get(x, ""))).strip())
     
     #summaries = process_pdf.in_parallel_multiprocessing(urls, max_workers=pdf_summaries_max_workers)
     #df_filters['Link'] = summaries
@@ -158,6 +159,8 @@ async def get_list(
             'Link',
             'Place'
         ]]
+        
+        press_df['Url'] = ''
         
         # 扶養なものを省く
         press_df = press_df[
@@ -360,6 +363,9 @@ async def get_irbank_list(
                 
         # 次のリンクへ
         target_page = list_soup.find('tr', id='loading').attrs['data-nx'].replace('/', '').replace('&pg=true', '')
+        if target_page == 'td?y=1744095600&p=1&f=140120250408510906':
+            # 緊急処理、ここでリンクが終わってしまうから
+            target_page = 'td?y=1744093800'
                 
     df = pd.DataFrame(all_page_data,columns=[
         'Date',
@@ -379,13 +385,13 @@ async def get_irbank_list(
         return target_page, None
     
     # 証券コードがないものと東証以外は除外
-    df_filters = df[df['Name'].isin(['ファンペップ', 'メディカルネット'])]
-    # df_filters = df[
-    #     df['Code'].str.strip().notna() &
-    #     (~df['Name'].str.contains('|'.join(exclusion_company), case=False, na=False)) &
-    #     (~df['Title'].str.contains('|'.join(exclusion_title), case=False, na=False)) &
-    #     (~df['Name'].str.isdigit()) 
-    #     ]
+    #df_filters = df[df['Name'].isin(['ファンペップ', 'メディカルネット'])]
+    df_filters = df[
+        df['Code'].str.strip().notna() &
+        (~df['Name'].str.contains('|'.join(exclusion_company), case=False, na=False)) &
+        (~df['Title'].str.contains('|'.join(exclusion_title), case=False, na=False)) &
+        (~df['Name'].str.isdigit()) 
+        ]
     
     # PDFの中身を要約してセット
     df_filters[['Link', 'Title']] = df_filters['Title'].apply(lambda x: pd.Series(extract_detailurl(x)))

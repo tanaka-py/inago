@@ -4,17 +4,11 @@ import requests
 import asyncio
 import aiohttp
 import multiprocessing
-import fitz  # PyMuPDF
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 import pdfplumber
 import os
 import sys
-import pandas as pd
-
-table_header_path = os.path.join(os.path.dirname(__file__), '../data/pdf_table_header.csv')
-table_header_df = pd.read_csv(table_header_path, header=None)
-table_headers = table_header_df.iloc[:,0].to_list()
 
 # fitz や pdfplumber などが出す stderr を握りつぶす
 sys.stderr = open(os.devnull, 'w')
@@ -58,25 +52,6 @@ async def download_pdf_async(url):
     return None
 
 # PDFのバイトデータから中のテキストデータを読込
-# def extract_text_from_pdf(pdf_data):
-#     start_time = time.time()
-
-#     text = ""
-#     try:
-#         # pdf_dataがbytesの場合でも対応できるように修正
-#         if isinstance(pdf_data, bytes):
-#             pdf_data = BytesIO(pdf_data)
-        
-#         with fitz.open(stream=pdf_data.getvalue(), filetype='pdf') as doc:
-#             for page in doc:
-#                 text += page.get_text("text", sort=True) + "\n"
-#     except RuntimeError:
-#         text = 'PDFの解析に失敗しました'
-
-#     elapsed_time = time.time() - start_time
-#     print(f"[extract_text_from_pdf] - {elapsed_time:.2f}秒")
-#     return text
-
 # --- ラベル補正関数 ---
 # 「（数字）」が見つかったときだけ処理、それ以外はそのまま
 # 正規化処理（ラベルが付いている場合）
@@ -106,85 +81,19 @@ def clean_cell(cell):
         print(f"clean_cellでエラーが発生しました: {e}")
         return '*'
 
-def guess_header_rows(table):
-    likely_keywords = table_headers
-    header_flags = []
-
-    try:
-        # 最初の3行をチェック！
-        for i, row in enumerate(table[:3]):
-            keyword_hits = sum(1 for cell in row if any(k in str(cell) for k in likely_keywords))
-            non_numeric = sum(1 for cell in row if not str(cell).strip().replace(',', '').replace('.', '').isdigit())
-
-            # 条件判定コポォｗｗｗ
-            is_header = (
-                keyword_hits >= 1 and      # ←ここがポイント！
-                non_numeric >= len(row) * 0.6
-            )
-            header_flags.append(is_header)
-
-        # 最後にTrueが出た位置までをヘッダーとみなす！
-        if True in header_flags:
-            last_index = max(i for i, flag in enumerate(header_flags) if flag)
-            return last_index + 1  # 行数なので+1
-
-    except Exception as e:
-        print(f"guess_header_rowsでエラーが発生しました: {e}")
-
-    return 0
-
-
-
-# ヘッダー結合魔法
-def merge_headers(table, header_rows):
-    try:
-        if header_rows == 0:
-            return [f"列{i+1}" for i in range(len(table[0]))]
-
-        header_parts = table[:header_rows]
-        max_len = max(len(row) for row in header_parts)
-
-        # 各行の長さを max_len にそろえる（足りないところは空文字追加）
-        for i in range(header_rows):
-            header_parts[i] += [''] * (max_len - len(header_parts[i]))
-
-        # 前回の値を記憶しておく用（空白だったときに引き継ぐ）
-        parts = [''] * max_len
-
-        for row_idx in range(header_rows):
-            for col_idx in range(max_len):
-                val = (header_parts[row_idx][col_idx] or '').strip()
-                if not val and row_idx == 0:
-                    # 最初の行であれば上のを引き継げないから前の列のを
-                    val = (parts[col_idx -1] if 0 < col_idx else ''  or '').strip()
-                        
-                parts[col_idx] += (' ' if 0 < row_idx else '') + val # 連結
-                
-        return parts
-
-    except Exception as e:
-        print(f"merge_headersでエラーが発生しました: {e}")
-        return []
-
-
 # テーブル整形関数（自動判定式！）
 def format_table(table):
     try:
         if not table or not table[0]:
             return "{'table': 『*』}"
-
-        header_rows = guess_header_rows(table)
-        headers = merge_headers(table, header_rows)
-        content = table[header_rows:]
-
-        formatted_headers = "『" + " | ".join([clean_cell(header) for header in headers]) + "』"
+        
         formatted_content = []
-        for row in content:
+        for row in table:
             cleaned_row = [clean_cell(cell) for cell in row]
             formatted_row = " | ".join(cleaned_row)
             formatted_content.append(f"「{formatted_row}」")
 
-        return "{'table': " + " " + formatted_headers + " " + " ".join(formatted_content) + "}"
+        return "{'table': " + " ".join(formatted_content) + "}"
     except Exception as e:
         print(f"format_tableでエラーが発生しました: {e}")
         return "{'table': 'エラーが発生しました'}"
@@ -217,7 +126,7 @@ def safe_within_bbox_text(page, top, bottom):
         print(f"フォカヌポウｗｗｗ within_bboxエラー回避したおｗｗｗ: {e}")
         return ""
 
-
+# PDFをpdflumberを使って読込み(tableの部分をある程度ちゃんと把握させときたいため)
 def extract_text_from_pdf(pdf_data):
     start_time = time.time()
     
@@ -274,43 +183,6 @@ def extract_text_from_pdf(pdf_data):
     elapsed_time = time.time() - start_time
     print(f"[extract_text_from_pdf] - {elapsed_time:.2f}秒")
     return final_content.strip()
-
-
-# 要約は諦める
-# ええものは金かかる
-# 長文読み込めるのが少ない
-# 要約しょぼい
-# 要約で削れるのは果たしてどうか
-# 要約処理(sumyを使用)
-# def summarize_text(text):
-#     start_time = time.time()
-
-#     try:
-#         # テキストの前処理: 改行や余分な空白を削除
-#         cleaned_text = re.sub(r'\n+', ' ', text)  # 改行をスペースに置き換え
-#         cleaned_text = re.sub(r'\s+', ' ', cleaned_text)  # 複数の空白を1つにする
-#         cleaned_text = cleaned_text.strip()  # 両端の余分な空白を削除
-
-#         # Hugging Faceの生成型要約モデルをロード
-#         summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-
-#         # 要約処理
-#         summary = summarizer(cleaned_text, max_length=200, min_length=50, do_sample=False)
-
-#         # summaryが空でないかを確認
-#         if not summary or 'summary_text' not in summary[0]:
-#             raise ValueError("Summary is empty or missing 'summary_text' key")
-
-#         elapsed_time = time.time() - start_time
-#         print(f"[summarize_text] - {elapsed_time:.2f}秒")
-
-#         return summary[0]['summary_text']
-
-#     except Exception as e:
-#         # エラーが発生した場合、エラーの内容を表示
-#         print(f"[ERROR] An error occurred: {e}")
-#         return None  # エラーが発生した場合はNoneを返す
-
 
 # PDFをダウンロードして要約して返す
 def summarize_pdf(url):

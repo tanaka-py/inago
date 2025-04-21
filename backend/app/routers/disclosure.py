@@ -38,7 +38,7 @@ async def get_tdnetlist(select_date):
     if not is_debug:
         # consleに開示をアップロードする
         await learning.upload_disclosure_from_list(
-            df[['Time','Date','Code', 'Name', 'Title', 'Link']],
+            df[['Time','Date','Code', 'Name', 'Title', 'Link', 'Url']],
             is_today=True
             )
     
@@ -71,24 +71,35 @@ async def upload_disclosure(item: LearningItem):
             'message': '開示が取得できなかったため終了'
             }
     
+    rtnMes = 'エラーなし'
     if not is_debug:
         
         # error行ないかチェック
-        error_df = df[df['Link'].str.contains('Error', na=False)]
+        error_df = df[df['Link'].str.contains('Error', na=False) & ~df['Link'].str.contains('URL', na=False)]
         
-        if error_df.empty:
+        # 次のリンクがちゃんとあるかも
+        error_link = [None, '', 'td?y=&f=']
+        
+        # いったんエラーが5つ以上の場合にエラー
+        if len(error_df) < 5 and next_link not in error_link:
             # consleに開示をアップロードする
             await learning.upload_disclosure_from_list(df,is_new_list=True)
                 
             # 全てが完了したら次のリンクをファイルに保存
-            # with open(nextlink_path, 'w', encoding='utf-8') as f:
-            #     f.write(next_link)
+            with open(nextlink_path, 'w', encoding='utf-8') as f:
+                f.write(next_link)
+                
+            # 一応一個前をバックアップ
+            nextlinkbackup_path = os.path.join(os.path.dirname(__file__), '../data/next_link_backup.txt')
+            with open(nextlinkbackup_path, 'w', encoding='utf-8') as fback:
+                fback.write(target_page)
         else:
             # エラーを確認するための保存
+            rtnMes = 'エラーありでストップ'
             await learning.upload_disclosure_from_error(df)
     
     return {
-        'message': item.date
+        'message': rtnMes
         }
 
 # 開示から学習を行う

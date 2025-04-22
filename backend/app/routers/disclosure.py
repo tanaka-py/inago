@@ -21,6 +21,9 @@ is_debug = os.getenv('is_debug', 'False').lower() == 'true'
 @router.get('/tdnetlist/{select_date}')
 async def get_tdnetlist(select_date):
     
+    # 撮り忘れ
+    #select_date = '2025-04-21'
+    
     # 処理対象ページを取得
     scraping_max_page = int(os.getenv('SCRAPING_MAX_PAGE', 1))
     

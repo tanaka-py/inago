@@ -187,10 +187,14 @@ def extract_text_from_pdf(pdf_data):
 # PDFをダウンロードして要約して返す
 def summarize_pdf(url):
     start_time = time.time()
+    
+    print(f'今からsummarize_pdf{url}とるよー')
 
     pdf_data = download_pdf(url)
     if not pdf_data:
         return "Failed to download PDF"
+    
+    print(f'終わったsummarize_pdf{url}')
     
     text = extract_text_from_pdf(pdf_data)
     if not text:
@@ -231,10 +235,13 @@ def in_parallel(urls, max_workers=10):
     start_time = time.time()
 
     results = {}
+    print(urls)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_url = {executor.submit(summarize_pdf, url) : url for url in urls}
         for future in future_to_url:
             url = future_to_url[future]
+            if url == "https://f.irbank.net/pdf/20241031/140120241001592334.pdf":
+                test = 'saaaa'
             try:
                 results[url] = future.result()
             except Exception as e:

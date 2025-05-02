@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from fastapi import BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 import json
+import re
 
 router = APIRouter()
 
@@ -78,7 +79,10 @@ async def upload_disclosure(item: LearningItem):
     if not is_debug:
         
         # error行ないかチェック
-        error_df = df[df['Link'].str.contains('Error', na=False) & ~df['Link'].str.contains('URL', na=False)]
+        error_df = df[
+            df['Link'].str.contains(r'^(Error[:：]|\bError\b)', na=False, flags=re.IGNORECASE) & 
+            ~df['Link'].str.contains('URL', na=False)
+            ]
         
         # 次のリンクがちゃんとあるかも
         error_link = [None, '', 'td?y=&f=']

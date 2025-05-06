@@ -14,4 +14,4 @@ function waitForServer(url, interval = 1000) {
   }, interval);
 }
 
-waitForServer('http://localhost:8000');
+waitForServer('http://localhost:8010');

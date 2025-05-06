@@ -20,7 +20,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/disclosure': 'http://localhost:8000'
+      '/disclosure': 'http://localhost:8010'
     }
   }
 })
